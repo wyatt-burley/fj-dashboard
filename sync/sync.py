@@ -199,10 +199,12 @@ def run_fast():
         if not a: continue
         r = by_asin.setdefault(a, {'asin': a, 'name': inv['productName'], 'inv': 0, 'inbound': 0,
             'u7': 0, 'u30': 0, 'fba30': 0, 'sales': 0.0, 'price': None, 'aged': [0,0,0,0,0],
+            'inbW': 0, 'inbS': 0, 'inbR': 0,
             'ais': 0.0, 'fbm': 0, 'costs': [], 'kw': set(), 'cats': set(), 'categories': set(),
             'skus': set(), 'added': None})
         r['name'] = r['name'] or inv['productName']
         r['inv'] += inv['fulfillable']
+        r['inbW'] += inv['inboundWorking']; r['inbS'] += inv['inboundShipped']; r['inbR'] += inv['inboundReceiving']
         r['inbound'] += inv['inboundWorking'] + inv['inboundShipped'] + inv['inboundReceiving']
         r['skus'].add(sku)
         p = planning.get(sku)
@@ -263,7 +265,9 @@ def run_fast():
             'category': ', '.join(sorted(r['categories'], key=str.lower))[:120],
             'tags': ('winter' if is_winter else ''), 'skuList': ' '.join(sorted(r['skus']))[:400],
             'added': r['added'], 'winter': is_winter, 'trend': trend,
-            'top': r['sales'] >= 1000, 'fbmOnly': fbm_only})
+            'top': r['sales'] >= 1000, 'fbmOnly': fbm_only,
+            'aged': r['aged'], 'ais': round(r['ais'], 1),
+            'inbW': r['inbW'], 'inbS': r['inbS'], 'inbR': r['inbR']})
     rows.sort(key=lambda r: (-r['sales'], -r['inv']))
 
     # -- image refresh for new ASINs (catalog batch of 20; '' marks known-missing

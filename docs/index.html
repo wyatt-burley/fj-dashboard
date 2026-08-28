@@ -167,16 +167,8 @@ let TAG_EDITS=window.__FJ_TAGS__||{};
 document.getElementById('sub').innerHTML=
   `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>`;
 
-const cards=[
-  ['Top Sellers ($1K+)',S.topCount,'','child ASINs over $1K / 30d'],
-  ['FBA Flagged (<'+S.coverFlagDays+'d)',S.flaggedCount,'',S.outCount+' out, '+S.criticalCount+' critical'],
-  ['Out of FBA',S.outCount,'out','0 units in FBA'],
-  ['Sales at Risk',money(S.revAtRisk),'risk',S.atRiskCount+' ASINs, FBA+FBM+inbound short'],
-  ['FBM Buffered',money(S.revBuffered),'',S.bufferedCount+' ASINs covered'],
-  ['Blended GM %',Math.round(S.blendedGM*1000)/10+'%','',money(S.marginAtRisk)+' margin at risk'],
-  ['Inbound to Amazon',S.inboundTotal.toLocaleString(),'',S.flaggedWithInbound+' flagged ASINs have stock en route']];
-document.getElementById('cards').innerHTML=cards.map(c=>
-  `<div class="card ${c[2]}"><div class="lbl">${c[0]}</div><div class="val">${typeof c[1]==='number'?c[1].toLocaleString():c[1]}</div><div class="vsub">${c[3]}</div></div>`).join('');
+/* KPI cards + charts recompute for the active scope; renderStats() is defined
+   after the chart helpers and called from there. */
 
 /* ---- charts ---- */
 const tt=document.getElementById('tt');
@@ -219,19 +211,47 @@ function bars(id,buckets,colors,fmt,sub){
     base.setAttribute('x1',m.l);base.setAttribute('x2',W-m.r);base.setAttribute('y1',H-m.b);base.setAttribute('y2',H-m.b);
     base.setAttribute('stroke','#d6dce6');base.setAttribute('stroke-width',1);svg.appendChild(base);
   };
-  draw();addEventListener('resize',draw);
+  svg._draw=draw;
+  if(!svg._bound){svg._bound=1;addEventListener('resize',()=>svg._draw&&svg._draw());}
+  draw();
 }
 const fmtU=v=>v>=10000?Math.round(v/1000)+'K':v.toLocaleString();
-(function(){
+function gmOf(r){return r._gm!=null?r._gm:r.gm;}
+function renderStats(){
+  const B=baseRows(),isTop=curScope==='top';
+  const flagged=B.filter(r=>r.tier!=='OK'),outR=B.filter(r=>r.tier==='OUT');
+  const atRisk=B.filter(r=>r.risk==='AT_RISK'),buff=B.filter(r=>r.risk==='BUFFERED');
+  const revAtRisk=atRisk.reduce((a,r)=>a+r.sales,0),revBuff=buff.reduce((a,r)=>a+r.sales,0);
+  const priced=B.filter(r=>gmOf(r)!=null&&r.sales>0);
+  const pSales=priced.reduce((a,r)=>a+r.sales,0);
+  const gm=pSales?priced.reduce((a,r)=>a+r.sales*gmOf(r),0)/pSales:null;
+  const marginAtRisk=priced.filter(r=>r.risk==='AT_RISK').reduce((a,r)=>a+r.sales*gmOf(r),0);
+  const inbTot=B.reduce((a,r)=>a+(r.inbound||0),0);
+  const flagInb=flagged.filter(r=>r.inbound>0).length;
+  const cards=[
+    [isTop?'Top Sellers ($1K+)':'Active ASINs',B.length,'',isTop?'child ASINs over $1K / 30d':'sold in 12 mo, or stock anywhere'],
+    ['FBA Flagged (<'+S.coverFlagDays+'d)',flagged.length,'',outR.length.toLocaleString()+' out, '+B.filter(r=>r.tier==='CRITICAL').length.toLocaleString()+' critical'],
+    ['Out of FBA',outR.length,'out','0 units in FBA'],
+    ['Sales at Risk',money(revAtRisk),'risk',atRisk.length.toLocaleString()+' ASINs, FBA+FBM+inbound short'],
+    ['FBM Buffered',money(revBuff),'',buff.length.toLocaleString()+' ASINs covered'],
+    ['Blended GM %',gm!=null?Math.round(gm*1000)/10+'%':'-','',money(marginAtRisk)+' margin at risk'],
+    ['Inbound to Amazon',inbTot,'',flagInb.toLocaleString()+' flagged ASINs have stock en route']];
+  document.getElementById('cards').innerHTML=cards.map(c=>
+    `<div class="card ${c[2]}"><div class="lbl">${c[0]}</div><div class="val">${typeof c[1]==='number'?c[1].toLocaleString():c[1]}</div><div class="vsub">${c[3]}</div></div>`).join('');
   const tiers=[['OUT','#912018'],['CRITICAL','#d4541a'],['LOW','#cc9a00'],['OK','#1a7a44']];
-  bars('tierChart',tiers.map(([t,c])=>[t,Math.round(R.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),R.filter(r=>r.tier===t).length+' ASINs']),
+  bars('tierChart',tiers.map(([t])=>[t,Math.round(B.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),B.filter(r=>r.tier===t).length.toLocaleString()+' ASINs']),
     tiers.map(t=>t[1]),v=>'$'+(v>=1000?Math.round(v/1000)+'K':v),'$');
-  const A=DATA.aged;
+  const hasAged=B.length&&B[0].aged!==undefined;
+  const A=hasAged?[0,1,2,3,4].map(i=>B.reduce((a,r)=>a+((r.aged||[])[i]||0),0)):DATA.aged;
+  const ltsf=hasAged?B.reduce((a,r)=>a+(r.ais||0),0):DATA.ltsf;
   bars('ageChart',[['0-90',A[0]],['91-180',A[1]],['181-270',A[2]],['271-365',A[3]],['365+',A[4]]],
     ['#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281'],fmtU);
-  document.getElementById('ageSub').textContent=(A[2]+A[3]+A[4]).toLocaleString()+' units aged 181+ days · $'+Math.round(DATA.ltsf).toLocaleString()+' long-term surcharge accruing';
-  bars('inbChart',DATA.inboundStages,['#86b6ef','#2a78d6','#104281'],fmtU);
-})();
+  document.getElementById('ageSub').textContent=(A[2]+A[3]+A[4]).toLocaleString()+' units aged 181+ days · $'+Math.round(ltsf).toLocaleString()+' long-term surcharge accruing'+(hasAged?'':' (account-wide)');
+  const hasStg=B.length&&B[0].inbW!==undefined;
+  const stages=hasStg?[['Working',B.reduce((a,r)=>a+(r.inbW||0),0)],['Shipped',B.reduce((a,r)=>a+(r.inbS||0),0)],['Receiving',B.reduce((a,r)=>a+(r.inbR||0),0)]]:DATA.inboundStages;
+  bars('inbChart',stages,['#86b6ef','#2a78d6','#104281'],fmtU);
+}
+/* initial renderStats() runs after the scope state is declared (filters section) */
 
 /* ---- columns ---- */
 const COLS=[
@@ -269,6 +289,7 @@ function renderTierChips(){
   document.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{curFilter=b.dataset.f;render()});
 }
 renderTierChips();
+renderStats();
 const scopeDefs=[['top','Top sellers ($1K+/30d)'],['all','All active ASINs']];
 function renderScope(){
   const sr=document.getElementById('scoperow');
@@ -280,7 +301,7 @@ function renderScope(){
     const b=document.createElement('button');b.className='qbtn'+(curScope===k?' active':'');b.type='button';
     const n=(k==='top'?R.filter(r=>r.top!==false):R).length;
     b.innerHTML=esc(label)+' <span class="cnt">'+n.toLocaleString()+'</span>';
-    b.onclick=()=>{if(curScope!==k){curScope=k;renderScope();renderTierChips();renderQuickBtns();renderTagChips();render();}};
+    b.onclick=()=>{if(curScope!==k){curScope=k;renderScope();renderStats();renderTierChips();renderQuickBtns();renderTagChips();render();}};
     sr.appendChild(b);
   });
 }
