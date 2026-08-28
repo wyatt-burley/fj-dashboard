@@ -1,0 +1,46 @@
+name: Sync dashboard data
+
+on:
+  schedule:
+    - cron: '17 2,8,14,20 * * *'   # every 6 hours (fast sync)
+    - cron: '43 6 * * 1'           # Mondays: 12-month trend refresh
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Sync mode'
+        type: choice
+        options: [fast, monthly]
+        default: fast
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Determine mode
+        id: mode
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          if [ -z "$MODE" ]; then
+            if [ "${{ github.event.schedule }}" = "43 6 * * 1" ]; then MODE=monthly; else MODE=fast; fi
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+      - name: Run sync
+        working-directory: sync
+        env:
+          LWA_CLIENT_ID: ${{ secrets.LWA_CLIENT_ID }}
+          LWA_CLIENT_SECRET: ${{ secrets.LWA_CLIENT_SECRET }}
+          LWA_REFRESH_TOKEN: ${{ secrets.LWA_REFRESH_TOKEN }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MODE: ${{ steps.mode.outputs.mode }}
+        run: python sync.py

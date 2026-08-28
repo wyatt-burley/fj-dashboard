@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Funky Junque FBA Inventory & Restock</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f4f6fa;color:#1b2333;font-size:14px}
+.wrap{max-width:1440px;margin:0 auto;padding:20px 18px 60px}
+h1{font-size:21px;margin:0;font-weight:700;letter-spacing:-.2px}
+.brandhead{display:flex;align-items:center;gap:13px;margin-bottom:6px}
+.brandtitle .eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#3a4046;margin-bottom:2px}
+.brandbar{height:3px;width:100%;border-radius:2px;background:linear-gradient(90deg,#141414 0%,#555 58%,#cfcfcf 100%);margin:0 0 16px;opacity:.9}
+.sub{color:#5b6678;font-size:12.5px;margin-bottom:16px;line-height:1.7}
+.sub b{color:#1b2333}
+.apibanner{display:flex;align-items:center;gap:10px;background:#e9f7ee;border:1px solid #bfe6cb;border-radius:10px;padding:9px 14px;font-size:12.5px;color:#1a5c33;margin-bottom:16px}
+.apibanner b{color:#124023}
+.apibanner .pulse{width:8px;height:8px;border-radius:50%;background:#0ca30c;flex:none;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.cards{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:14px}
+.card{background:#fff;border:1px solid #e6eaf1;border-radius:10px;padding:13px 14px;box-shadow:0 1px 2px rgba(20,30,60,.04)}
+.card .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#7a8499;font-weight:600}
+.card .val{font-size:22px;font-weight:700;margin-top:4px;line-height:1.1}
+.card .vsub{font-size:11px;color:#8b95a7;margin-top:3px}
+.card.risk .val{color:#b42318}
+.card.out .val{color:#912018}
+.panels{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+@media(max-width:980px){.panels{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}}
+.panel{background:#fff;border:1px solid #e6eaf1;border-radius:10px;padding:13px 14px;box-shadow:0 1px 2px rgba(20,30,60,.04)}
+.panel h2{font-size:13px;margin:0 0 2px;font-weight:700}
+.panel .psub{font-size:11.5px;color:#8b95a7;margin-bottom:8px}
+svg text{font-family:inherit}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.fbtn{border:1px solid #d6dce6;background:#fff;border-radius:20px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263;display:flex;align-items:center;gap:6px}
+.fbtn .dot{width:8px;height:8px;border-radius:50%}
+.fbtn.active{background:#1b2333;color:#fff;border-color:#1b2333}
+.fbtn.active .cnt{color:#cdd5e2}
+.fbtn .cnt{color:#94a0b3;font-weight:700}
+.quickrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.quickrow .qlbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8b95a7;font-weight:700;margin-right:2px}
+.qbtn{border:1px dashed #b9c6da;background:#f7fafd;border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;color:#345d9d;display:flex;align-items:center;gap:6px}
+.qbtn.active{background:#345d9d;color:#fff;border-color:#345d9d;border-style:solid}
+.qbtn .cnt{opacity:.7;font-weight:700}
+input.search{flex:1;min-width:200px;border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:13px;outline:none}
+input.search:focus{border-color:#1b6fd4}
+input.who{border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:12.5px;outline:none;width:170px;flex:none}
+.colbtn{border:1px solid #d6dce6;background:#fff;border-radius:8px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263;flex:none}
+.colpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:10px 14px;display:none;columns:2;gap:18px;min-width:320px}
+.colpop label{display:block;font-size:12.5px;padding:3px 0;white-space:nowrap;cursor:pointer;break-inside:avoid}
+.colwrap{position:relative;flex:none}
+.tablewrap{background:#fff;border:1px solid #e6eaf1;border-radius:10px;overflow:auto}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#7a8499;cursor:pointer;user-select:none;background:#fafbfd;position:sticky;top:0;z-index:5}
+th.r,td.r{text-align:right}
+td.name{white-space:normal;max-width:300px;color:#2c3445;font-size:12.5px;line-height:1.35}
+td.asin{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#5b6678}
+tr.mainrow:hover td{background:#f8faff}
+td.imgc{padding:4px 6px}
+td.imgc a{display:block;width:46px;height:46px;border-radius:6px;overflow:hidden;border:1px solid #e6eaf1;background:#fff}
+td.imgc img{width:100%;height:100%;object-fit:contain;display:block}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.OUT{background:#fbe9e7;color:#912018}
+.CRITICAL{background:#fdecdd;color:#b5470f}
+.LOW{background:#fdf3d6;color:#9a6a00}
+.OK{background:#e3f5ea;color:#1a7a44}
+.AT_RISK{background:#fbe3e3;color:#a4161a}
+.BUFFERED{background:#e6eefb;color:#345d9d}
+.RISKOK{color:#a7b0c0;font-size:11px}
+.daysbad{color:#912018;font-weight:700}
+.dayswarn{color:#b5470f;font-weight:600}
+.muted{color:#a7b0c0}
+.foot{color:#8b95a7;font-size:11.5px;margin-top:14px;line-height:1.7}
+.count{color:#5b6678;font-size:12.5px;font-weight:600;margin:10px 2px}
+td.notes{white-space:normal;min-width:210px}
+.noteinput{width:206px;min-height:32px;resize:vertical;border:1px solid #d6dce6;border-radius:6px;padding:5px 7px;font-family:inherit;font-size:12px;line-height:1.35;background:#fff}
+.noteinput:focus{border-color:#1b6fd4;outline:none}
+.notestat{font-size:10px;color:#a7b0c0;margin-top:2px;min-height:12px}
+.notestat.saving{color:#b5470f}.notestat.saved{color:#1a7a44}.notestat.failed{color:#a4161a;font-weight:700}
+.costin{width:74px;border:1px solid #d6dce6;border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:right;font-family:inherit;background:#fffdf5}
+.costin:focus{border-color:#1b6fd4;outline:none}
+.costin.edited{background:#fff3d6;border-color:#cc9a00}
+.tagin{width:96px;border:1px solid #d6dce6;border-radius:6px;padding:4px 6px;font-size:12px;font-family:inherit;background:#f7fafd}
+.tagin:focus{border-color:#1b6fd4;outline:none}
+.tagin.edited{background:#e6f2ea;border-color:#1a7a44}
+.trbtn{border:1px solid #d6dce6;background:#fff;border-radius:6px;padding:3px 8px;font-size:11.5px;cursor:pointer;color:#345d9d;font-weight:700}
+.trbtn.open{background:#345d9d;color:#fff}
+tr.trendrow td{background:#fbfcfe;padding:10px 16px}
+.tooltip{position:fixed;pointer-events:none;z-index:70;background:#fff;border:1px solid #e6eaf1;box-shadow:0 4px 14px rgba(20,30,60,.16);border-radius:9px;padding:8px 11px;font-size:12.5px;display:none;max-width:250px}
+.tooltip .tt-t{color:#8b95a7;font-size:11px;margin-bottom:3px}
+.tooltip .tt-v{font-weight:700}
+
+#loginOverlay{position:fixed;inset:0;background:#f4f6fa;z-index:200;display:flex;align-items:center;justify-content:center}
+.loginbox{background:#fff;border:1px solid #e6eaf1;border-radius:14px;padding:34px 38px;width:360px;box-shadow:0 8px 30px rgba(20,30,60,.10)}
+.loginbox .eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#3a4046}
+.loginbox h2{margin:2px 0 18px;font-size:20px}
+.loginbox input{width:100%;border:1px solid #d6dce6;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px;box-sizing:border-box}
+.loginbox button{width:100%;background:#1b2333;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+.loginbox .err{color:#a4161a;font-size:12.5px;min-height:16px;margin-bottom:6px}
+</style></head>
+<body>
+<div id="loginOverlay"><form class="loginbox" id="loginForm">
+  <div class="eyebrow">Funky Junque</div><h2>Inventory Dashboard</h2>
+  <input type="email" id="liEmail" placeholder="Email" autocomplete="username" required>
+  <input type="password" id="liPass" placeholder="Password" autocomplete="current-password" required>
+  <div class="err" id="liErr"></div>
+  <button type="submit">Sign in</button>
+</form></div>
+<div class="wrap" id="appwrap" style="visibility:hidden">
+<div class="brandhead"><div class="brandtitle"><div class="eyebrow">Funky Junque</div><h1>FBA Inventory &amp; Restock</h1></div></div><div class="brandbar"></div>
+<a href="#" id="signout" style="float:right;margin-top:-46px;font-size:12px;color:#5b6678">Sign out</a>
+<div class="sub" id="sub"></div>
+<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API connected.</b> Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
+<div class="cards" id="cards"></div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>30-day sales by FBA cover tier</h2>
+    <div class="psub">Where current revenue sits - how much of it rides on thin FBA cover</div>
+    <svg id="tierChart" width="100%" height="180" role="img" aria-label="Bar chart of 30 day sales by FBA cover tier"></svg>
+  </div>
+  <div class="panel">
+    <h2>Inventory age</h2>
+    <div class="psub" id="ageSub">On-hand units by age bucket (all FBA inventory)</div>
+    <svg id="ageChart" width="100%" height="180" role="img" aria-label="Bar chart of on-hand units by age bucket"></svg>
+  </div>
+  <div class="panel">
+    <h2>Inbound pipeline - "Amazon's hands"</h2>
+    <div class="psub" id="inbSub">Units on their way to or inside Amazon, by stage</div>
+    <svg id="inbChart" width="100%" height="180" role="img" aria-label="Bar chart of inbound units by stage"></svg>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="filters" id="filters"></div>
+  <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword...">
+  <input class="who" id="whoami" placeholder="Your name (for notes)">
+  <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
+</div>
+<div class="quickrow" id="quickrow"><span class="qlbl">Quick views</span></div>
+<div class="quickrow" id="tagrow"></div>
+<div class="quickrow"><button class="qbtn" id="legendBtn" type="button" style="border-style:solid;background:#fff;color:#485263">How the flags work &#9662;</button></div>
+<div id="legendBox" style="display:none;background:#fbfcfe;border:1px dashed #b9c6da;border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.8;color:#3a4657;margin-bottom:12px">
+<b>Velocity</b> = trailing-30-day units (all channels, FBA + FBM) &divide; 30 = units/day.<br>
+<b>FBA Days</b> = FBA sellable stock &divide; velocity &rarr; the tier: <span class="badge OUT">OUT</span> 0 in FBA &nbsp; <span class="badge CRITICAL">CRITICAL</span> under 7 days &nbsp; <span class="badge LOW">LOW</span> 7&ndash;14 days &nbsp; <span class="badge OK">OK</span> 14+ days.<br>
+<b>Total Days</b> adds FBM stock on top of FBA (the backstop if FBA runs dry &mdash; slower shipping, but the sale isn't lost).<br>
+<b>Sales Risk</b>: <span class="badge AT_RISK">AT RISK</span> = FBA + FBM <i>and</i> inbound together still cover under 14 days &mdash; these dollars are genuinely exposed; restock decisions start here. <span class="badge BUFFERED">BUFFERED</span> = FBA is short but FBM stock or inbound already on its way restores cover &mdash; watch, don't panic.<br>
+<b>Why four sales windows?</b> 1-day catches what moved yesterday; 7-day smooths out one big order distorting the rate; 30-day sets the restock math; 12-month shows seasonality so winter sends aren't sized off August sales. Check the 12-mo trend before trusting any single window.
+</div>
+<div class="count" id="count"></div>
+<div class="tablewrap"><table id="tbl">
+<thead><tr id="hrow"></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="foot" id="foot"></div>
+</div>
+<div class="tooltip" id="tt"></div>
+<script type="text/plain" id="mainjs">
+const DATA = window.__FJ_DATA__;
+const S=DATA.summary, R=DATA.rows, MONTHS=DATA.months||[];
+const COSTS0=window.__FJ_COSTS__||{};
+for(const r of R){const c=COSTS0[r.asin];if(c!=null&&r.u30){const asp=r.sales/r.u30;r._gm=asp?Math.round((asp-c)/asp*1000)/1000:null;}}
+const TORDER={OUT:0,CRITICAL:1,LOW:2,OK:3};
+const RORDER={AT_RISK:0,BUFFERED:1,OK:2};
+const money=n=>'$'+Math.round(n).toLocaleString();
+const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let TAG_EDITS=window.__FJ_TAGS__||{};
+document.getElementById('sub').innerHTML=
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>`;
+
+const cards=[
+  ['Top Sellers ($1K+)',S.topCount,'','child ASINs over $1K / 30d'],
+  ['FBA Flagged (<'+S.coverFlagDays+'d)',S.flaggedCount,'',S.outCount+' out, '+S.criticalCount+' critical'],
+  ['Out of FBA',S.outCount,'out','0 units in FBA'],
+  ['Sales at Risk',money(S.revAtRisk),'risk',S.atRiskCount+' ASINs, FBA+FBM+inbound short'],
+  ['FBM Buffered',money(S.revBuffered),'',S.bufferedCount+' ASINs covered'],
+  ['Blended GM %',Math.round(S.blendedGM*1000)/10+'%','',money(S.marginAtRisk)+' margin at risk'],
+  ['Inbound to Amazon',S.inboundTotal.toLocaleString(),'',S.flaggedWithInbound+' flagged ASINs have stock en route']];
+document.getElementById('cards').innerHTML=cards.map(c=>
+  `<div class="card ${c[2]}"><div class="lbl">${c[0]}</div><div class="val">${typeof c[1]==='number'?c[1].toLocaleString():c[1]}</div><div class="vsub">${c[3]}</div></div>`).join('');
+
+/* ---- charts ---- */
+const tt=document.getElementById('tt');
+function ttShow(t1txt,t2txt,e){tt.replaceChildren();
+  const t1=document.createElement('div');t1.className='tt-t';t1.textContent=t1txt;
+  const t2=document.createElement('div');t2.className='tt-v';t2.textContent=t2txt;
+  tt.append(t1,t2);tt.style.display='block';
+  tt.style.left=Math.min(e.clientX+14,innerWidth-170)+'px';tt.style.top=(e.clientY+14)+'px';}
+function bars(id,buckets,colors,fmt,sub){
+  const svg=document.getElementById(id); if(!svg) return;
+  const draw=()=>{
+    svg.replaceChildren();
+    const W=svg.clientWidth||420,H=180,m={t:24,b:30,l:8,r:8};
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    const NS='http://www.w3.org/2000/svg';
+    const max=Math.max(...buckets.map(b=>b[1]),1);
+    const band=(W-m.l-m.r)/buckets.length,bw=Math.min(36,band*.5);
+    buckets.forEach((b,i)=>{
+      const v=b[1],bh=Math.max(v>0?3:0,(H-m.t-m.b)*v/max),bx=m.l+band*i+(band-bw)/2,by=H-m.b-bh;
+      if(v>0){const p=document.createElementNS(NS,'path');const r=Math.min(4,bh);
+      p.setAttribute('d',`M${bx} ${H-m.b} V${by+r} Q${bx} ${by} ${bx+r} ${by} H${bx+bw-r} Q${bx+bw} ${by} ${bx+bw} ${by+r} V${H-m.b} Z`);
+      p.setAttribute('fill',colors[i]||colors[colors.length-1]);svg.appendChild(p);}
+      const cap=document.createElementNS(NS,'text');
+      cap.setAttribute('x',bx+bw/2);cap.setAttribute('y',by-7);cap.setAttribute('text-anchor','middle');
+      cap.setAttribute('font-size',11.5);cap.setAttribute('font-weight',700);cap.setAttribute('fill','#1b2333');
+      cap.textContent=fmt(v);svg.appendChild(cap);
+      const lb=document.createElementNS(NS,'text');
+      lb.setAttribute('x',bx+bw/2);lb.setAttribute('y',H-m.b+15);lb.setAttribute('text-anchor','middle');
+      lb.setAttribute('font-size',10.5);lb.setAttribute('fill','#7a8499');lb.textContent=b[0];svg.appendChild(lb);
+      if(b[2]){const l2=document.createElementNS(NS,'text');
+      l2.setAttribute('x',bx+bw/2);l2.setAttribute('y',H-m.b+27);l2.setAttribute('text-anchor','middle');
+      l2.setAttribute('font-size',9.5);l2.setAttribute('fill','#a7b0c0');l2.textContent=b[2];svg.appendChild(l2);}
+      const hot=document.createElementNS(NS,'rect');
+      hot.setAttribute('x',m.l+band*i);hot.setAttribute('y',0);hot.setAttribute('width',band);hot.setAttribute('height',H-m.b);hot.setAttribute('fill','transparent');
+      hot.addEventListener('pointermove',e=>ttShow(b[0],(sub||'')+v.toLocaleString()+(sub?'':' units'),e));
+      hot.addEventListener('pointerleave',()=>tt.style.display='none');
+      svg.appendChild(hot);
+    });
+    const base=document.createElementNS(NS,'line');
+    base.setAttribute('x1',m.l);base.setAttribute('x2',W-m.r);base.setAttribute('y1',H-m.b);base.setAttribute('y2',H-m.b);
+    base.setAttribute('stroke','#d6dce6');base.setAttribute('stroke-width',1);svg.appendChild(base);
+  };
+  draw();addEventListener('resize',draw);
+}
+const fmtU=v=>v>=10000?Math.round(v/1000)+'K':v.toLocaleString();
+(function(){
+  const tiers=[['OUT','#912018'],['CRITICAL','#d4541a'],['LOW','#cc9a00'],['OK','#1a7a44']];
+  bars('tierChart',tiers.map(([t,c])=>[t,Math.round(R.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),R.filter(r=>r.tier===t).length+' ASINs']),
+    tiers.map(t=>t[1]),v=>'$'+(v>=1000?Math.round(v/1000)+'K':v),'$');
+  const A=DATA.aged;
+  bars('ageChart',[['0-90',A[0]],['91-180',A[1]],['181-270',A[2]],['271-365',A[3]],['365+',A[4]]],
+    ['#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281'],fmtU);
+  document.getElementById('ageSub').textContent=(A[2]+A[3]+A[4]).toLocaleString()+' units aged 181+ days · $'+Math.round(DATA.ltsf).toLocaleString()+' long-term surcharge accruing';
+  bars('inbChart',DATA.inboundStages,['#86b6ef','#2a78d6','#104281'],fmtU);
+})();
+
+/* ---- columns ---- */
+const COLS=[
+  ['img','Image',1],['tier','FBA Tier',1],['asin','ASIN',1],['name','Product',1],
+  ['tags','Tags',1],['kw','Keyword',0],['category','Category',0],
+  ['price','Price',1],['cost','Unit Cost',1],['gm','GM %',1],
+  ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
+  ['sales','30d Sales $',0],['daily','Units/day',0],
+  ['inv','FBA Inv',1],['fbaDays','FBA Days',1],['fbm','FBM Inv',1],['inbound','Inbound',1],
+  ['combDays','Total Days',1],['risk','Sales Risk',1],['trend','Trend',1],['notes','Notes',1]];
+let visible={};COLS.forEach(c=>visible[c[0]]=!!c[2]);
+try{const s=localStorage.getItem('fj_cols');if(s)visible=Object.assign(visible,JSON.parse(s));}catch(e){}
+const colPop=document.getElementById('colPop');
+function renderColPop(){
+  colPop.replaceChildren();
+  COLS.forEach(([k,label])=>{
+    const l=document.createElement('label');
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!visible[k];
+    cb.addEventListener('change',()=>{visible[k]=cb.checked;try{localStorage.setItem('fj_cols',JSON.stringify(visible));}catch(e){};render();});
+    l.append(cb,document.createTextNode(' '+label));colPop.appendChild(l);
+  });
+}
+renderColPop();
+document.getElementById('colBtn').onclick=e=>{colPop.style.display=colPop.style.display==='block'?'none':'block';e.stopPropagation();};
+document.addEventListener('click',e=>{if(!colPop.contains(e.target)&&e.target.id!=='colBtn')colPop.style.display='none';});
+
+/* ---- filters ---- */
+const tierFilters=[['FLAGGED','#1b2333',S.flaggedCount],['AT RISK','#a4161a',S.atRiskCount],['OUT','#912018',S.outCount],['CRITICAL','#d4541a',S.criticalCount],['LOW','#cc9a00',S.lowCount],['ALL','#5b6678',S.topCount]];
+let curFilter='FLAGGED',curSearch='',sortK='fbaDays',sortAsc=true,quick=null;
+document.getElementById('filters').innerHTML=tierFilters.map(t=>
+  `<button class="fbtn" data-f="${t[0]}"><span class="dot" style="background:${t[1]}"></span>${t[0]} <span class="cnt">${t[2]}</span></button>`).join('');
+document.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{curFilter=b.dataset.f;render()});
+const QUICK=[
+  ['sold5','Sold 5+ yesterday',r=>r.u1>=5],
+  ['winterSold','Winter sold yesterday',r=>r.winter&&r.u1>0],
+  ['new6','New (last 6 mo)',r=>(r.added||'')>=S.newCutoff],
+  ['hasInb','Stock en route',r=>r.inbound>0],
+  ['noFBM','No FBM backup',r=>r.fbm===0&&r.tier!=='OK']];
+const qr=document.getElementById('quickrow');
+QUICK.forEach(([k,label,fn])=>{
+  const b=document.createElement('button');b.className='qbtn';b.type='button';
+  b.innerHTML=esc(label)+' <span class="cnt">'+R.filter(fn).length+'</span>';
+  b.onclick=()=>{quick=quick===k?null:k;document.querySelectorAll('.qbtn').forEach(x=>x.classList.remove('active'));if(quick)b.classList.add('active');render();};
+  b.dataset.q=k;qr.appendChild(b);
+});
+document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
+
+/* ---- per-tag filter chips (dynamic) ---- */
+let curTag=null;
+function effTags(r){return String(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')).split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);}
+function renderTagChips(){
+  const tr=document.getElementById('tagrow');
+  tr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Tags';tr.appendChild(lbl);
+  const counts={};
+  R.forEach(r=>effTags(r).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  if(!names.length){const m=document.createElement('span');m.className='muted';m.style.fontSize='12px';m.textContent='Type a tag on any row (e.g. best, winter) and it becomes a filter here.';tr.appendChild(m);}
+  names.forEach(t=>{
+    const b=document.createElement('button');b.className='qbtn'+(curTag===t?' active':'');b.type='button';
+    b.append(document.createTextNode(t+' '));
+    const c=document.createElement('span');c.className='cnt';c.textContent=counts[t];b.appendChild(c);
+    b.onclick=()=>{curTag=curTag===t?null:t;render();};
+    tr.appendChild(b);
+  });
+}
+
+/* ---- notes (team database) ---- */
+let NOTES=window.__FJ_NOTES__||{},NOTE_TIMERS={};
+function whoEl(){return document.getElementById('whoami');}
+function getWho(){const el=whoEl();return (el&&el.value.trim())||window.__FJ_USER__||'Funky Junque';}
+function fmtWhen(v){if(!v)return '';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});}
+function ncell(asin){const n=NOTES[asin]||{};
+  const meta=n.note&&n.at?('saved '+fmtWhen(n.at)+(n.by?' by '+esc(n.by):'')):'';
+  return '<textarea class="noteinput" data-asin="'+esc(asin)+'" placeholder="Add note...">'+esc(n.note||'')+'</textarea><div class="notestat">'+meta+'</div>';}
+function saveNote(asin,val,statEl){const who=getWho();
+  if(statEl){statEl.textContent='Saving...';statEl.className='notestat saving';}
+  window.sb.from('notes').upsert({asin:asin,note:val,by:who,at:new Date().toISOString()})
+    .then(({error})=>{if(error)throw error;
+      NOTES[asin]={note:val,by:who,at:new Date().toISOString()};
+      if(statEl){statEl.textContent=val?'Saved':'Cleared';statEl.className='notestat saved';}})
+    .catch(()=>{if(statEl){statEl.textContent='Save failed, retry';statEl.className='notestat failed';}});}
+(function initWho(){const el=whoEl();if(el&&window.__FJ_USER__){el.value=(window.__FJ_USER__.split('@')[0]||'').replace(/^./,c=>c.toUpperCase());}})();
+function saveOverride(asin){
+  const patch={asin:asin,updated_by:getWho(),updated_at:new Date().toISOString()};
+  if(TAG_EDITS[asin]!=null)patch.tags=TAG_EDITS[asin];
+  if(COST_EDITS[asin]!=null)patch.cost=COST_EDITS[asin];
+  window.sb.from('overrides').upsert(patch).then(({error})=>{if(error)console.warn('override save failed',error);});
+}
+
+/* ---- cost edits (in-page until database deploy) ---- */
+let COST_EDITS=Object.assign({},window.__FJ_COSTS__||{});
+
+/* ---- table ---- */
+const dcell=v=>v==null||v===999?'<span class="muted">-</span>':(v<7?'<span class="daysbad">'+v+'</span>':(v<14?'<span class="dayswarn">'+v+'</span>':v));
+const rcell=r=>r==='AT_RISK'?'<span class="badge AT_RISK">AT RISK</span>':(r==='BUFFERED'?'<span class="badge BUFFERED">BUFFERED</span>':'<span class="RISKOK">ok</span>');
+let openTrend=null;
+function cellHTML(k,r){
+  const gmv=(r._gm!=null?r._gm:r.gm);
+  switch(k){
+    case 'img': return '<td class="imgc" data-c="img">'+(r.img?'<a href="https://www.amazon.com/dp/'+esc(r.asin)+'" target="_blank" rel="noopener"><img loading="lazy" src="'+esc(r.img)+'" alt=""></a>':'')+'</td>';
+    case 'tier': return '<td data-c="tier"><span class="badge '+r.tier+'">'+r.tier+'</span></td>';
+    case 'asin': return '<td class="asin" data-c="asin">'+esc(r.asin)+'</td>';
+    case 'name': return '<td class="name" data-c="name">'+esc(r.name)+'</td>';
+    case 'tags': return '<td data-c="tags"><input class="tagin'+(TAG_EDITS[r.asin]?' edited':'')+'" data-asin="'+esc(r.asin)+'" value="'+esc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||''))+'" placeholder="best, ..."></td>';
+    case 'kw': return '<td data-c="kw" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:#5b6678">'+esc(r.kw||'')+'</td>';
+    case 'category': return '<td data-c="category" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:#5b6678" title="'+esc(r.category||'')+'">'+esc(r.category||'')+'</td>';
+    case 'price': return '<td class="r" data-c="price">'+(r.price!=null?'$'+r.price.toFixed(2):'<span class="muted">-</span>')+'</td>';
+    case 'cost': return '<td class="r" data-c="cost"><input class="costin'+(COST_EDITS[r.asin]!=null?' edited':'')+'" data-asin="'+esc(r.asin)+'" value="'+(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost!=null?r.cost.toFixed(2):''))+'" inputmode="decimal"></td>';
+    case 'gm': return '<td class="r" data-c="gm">'+(gmv!=null?Math.round(gmv*100)+'%':'<span class="muted">-</span>')+'</td>';
+    case 'u1': return '<td class="r" data-c="u1">'+(r.u1?'<b>'+r.u1.toLocaleString()+'</b>':'<span class="muted">0</span>')+'</td>';
+    case 'u7': return '<td class="r" data-c="u7">'+r.u7.toLocaleString()+'</td>';
+    case 'u30': return '<td class="r" data-c="u30">'+r.u30.toLocaleString()+'</td>';
+    case 'u365': return '<td class="r" data-c="u365">'+(r.u365?r.u365.toLocaleString():'<span class="muted">-</span>')+'</td>';
+    case 'sales': return '<td class="r" data-c="sales">'+money(r.sales)+'</td>';
+    case 'daily': return '<td class="r" data-c="daily">'+r.daily+'</td>';
+    case 'inv': return '<td class="r" data-c="inv">'+r.inv.toLocaleString()+'</td>';
+    case 'fbaDays': return '<td class="r" data-c="fbaDays">'+dcell(r.fbaDays)+'</td>';
+    case 'fbm': return '<td class="r" data-c="fbm">'+r.fbm.toLocaleString()+'</td>';
+    case 'inbound': return '<td class="r" data-c="inbound">'+(r.inbound?'<b>'+r.inbound.toLocaleString()+'</b>':'<span class="muted">-</span>')+'</td>';
+    case 'combDays': return '<td class="r" data-c="combDays">'+dcell(r.combDays)+'</td>';
+    case 'risk': return '<td data-c="risk">'+rcell(r.risk)+'</td>';
+    case 'trend': return '<td data-c="trend"><button class="trbtn'+(openTrend===r.asin?' open':'')+'" data-asin="'+esc(r.asin)+'" type="button">12-mo &#9660;</button></td>';
+    case 'notes': return '<td class="notes" data-c="notes">'+ncell(r.asin)+'</td>';
+  }
+  return '';
+}
+function trendSVG(r){
+  const w=Math.min(900,innerWidth-140),h=120,m={t:18,b:22,l:8,r:8};
+  const vals=r.trend||[];
+  if(!vals.length||!MONTHS.length) return '<span class="muted">12-month trend loads with the next data refresh.</span>';
+  const max=Math.max(...vals,1);
+  const band=(w-m.l-m.r)/vals.length,bw=Math.min(40,band*.6);
+  let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  vals.forEach((v,i)=>{
+    const bh=Math.max(v>0?2:0,(h-m.t-m.b)*v/max),bx=m.l+band*i+(band-bw)/2,by=h-m.b-bh;
+    s+=`<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${i===vals.length-1?'#1c5cab':'#5598e7'}"></rect>`;
+    s+=`<text x="${(bx+bw/2).toFixed(1)}" y="${(by-5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1b2333">${v>=1000?Math.round(v/100)/10+'K':v}</text>`;
+    const lbl=MONTHS[i]?MONTHS[i].slice(5)+'/'+MONTHS[i].slice(2,4):'';
+    s+=`<text x="${(bx+bw/2).toFixed(1)}" y="${h-8}" text-anchor="middle" font-size="9.5" fill="#7a8499">${lbl}</text>`;
+  });
+  s+='</svg>';
+  return s;
+}
+function render(){
+  const shown=COLS.filter(c=>visible[c[0]]);
+  document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
+    `<th data-k="${k}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}</th>`).join('');
+  let rows=R.slice();
+  if(curFilter==='FLAGGED')rows=rows.filter(r=>r.tier!=='OK');
+  else if(curFilter==='AT RISK')rows=rows.filter(r=>r.risk==='AT_RISK');
+  else if(curFilter!=='ALL')rows=rows.filter(r=>r.tier===curFilter);
+  if(quick){const fn=QUICK.find(q=>q[0]===quick)[2];rows=rows.filter(fn);}
+  if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
+  if(curSearch)rows=rows.filter(r=>(r.name+' '+r.asin+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase().includes(curSearch));
+  rows.sort((a,b)=>{let x,y;
+    if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
+    else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
+    else if(sortK==='tags'){x=effTags(a).join(',')||'￿';y=effTags(b).join(',')||'￿';return sortAsc?(x<y?-1:1):(x>y?-1:1)}
+    else if(sortK==='name'||sortK==='asin'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'').toLowerCase();y=(b[sortK]||'').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
+    else{x=a[sortK]==null?1e9:a[sortK];y=b[sortK]==null?1e9:b[sortK]}
+    return sortAsc?x-y:y-x;});
+  document.getElementById('count').textContent=rows.length+' ASINs';
+  let html='';
+  for(const r of rows){
+    html+='<tr class="mainrow">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
+    if(openTrend===r.asin)html+='<tr class="trendrow"><td colspan="'+shown.length+'"><b style="font-size:12px">'+esc(r.name.slice(0,80))+'</b> - units ordered by month (trailing 12)<br>'+trendSVG(r)+'</td></tr>';
+  }
+  document.getElementById('tb').innerHTML=html;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
+  document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
+    if(['img','trend','notes'].includes(k))return;
+    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=['tier','risk','fbaDays','combDays','inv','fbm','name','asin','tags','kw','category'].includes(k);}
+    render();});
+  renderTagChips();
+}
+document.getElementById('tb').addEventListener('click',e=>{
+  const b=e.target.closest('.trbtn');
+  if(b){openTrend=openTrend===b.dataset.asin?null:b.dataset.asin;render();}
+});
+document.getElementById('legendBtn').onclick=()=>{
+  const lb=document.getElementById('legendBox');
+  lb.style.display=lb.style.display==='none'?'block':'none';
+};
+document.getElementById('tb').addEventListener('input',e=>{
+  const t=e.target;
+  if(t.classList.contains('tagin')){
+    TAG_EDITS[t.dataset.asin]=t.value.trim();
+    t.classList.add('edited');
+    clearTimeout(window._tagTimer);window._tagTimer=setTimeout(renderTagChips,600);
+    clearTimeout(window._tagSave);window._tagSave=setTimeout(()=>saveOverride(t.dataset.asin),900);
+  }
+  if(t.classList.contains('costin')){
+    const v=parseFloat(t.value);
+    const r=R.find(x=>x.asin===t.dataset.asin);
+    if(r&&!isNaN(v)&&v>0){COST_EDITS[r.asin]=v;
+      const asp=r.u30?r.sales/r.u30:null;
+      r._gm=asp?Math.round((asp-v)/asp*1000)/1000:null;
+      t.classList.add('edited');
+      const gmTd=t.closest('tr').querySelector('[data-c="gm"]');
+      if(gmTd)gmTd.innerHTML=r._gm!=null?Math.round(r._gm*100)+'%':'-';
+      clearTimeout(window._costSave);window._costSave=setTimeout(()=>saveOverride(r.asin),900);
+    }
+  }
+  if(t.classList.contains('noteinput')){
+    const asin=t.dataset.asin,stat=t.parentNode.querySelector('.notestat');
+    clearTimeout(NOTE_TIMERS[asin]);
+    if(stat){stat.textContent='Typing...';stat.className='notestat';}
+    NOTE_TIMERS[asin]=setTimeout(()=>saveNote(asin,t.value,stat),900);
+  }
+});
+document.getElementById('tb').addEventListener('focusout',e=>{
+  const t=e.target;
+  if(t.classList&&t.classList.contains('noteinput')){
+    const asin=t.dataset.asin,stat=t.parentNode.querySelector('.notestat');
+    clearTimeout(NOTE_TIMERS[asin]);saveNote(asin,t.value,stat);
+  }
+});
+document.getElementById('foot').innerHTML=
+  `<b>Sales windows:</b> 1-day = ${esc(S.dayDate)} (Amazon sales reports lag ~48h); 7/30-day and 12-Mo = units ordered across ALL channels (FBA + FBM). `+
+  `<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), CRITICAL (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
+  `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
+  `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs from Sellery migration; prices & images live from Amazon. `+
+  `<b>Tags</b> (e.g. "best") are editable labels shared with the whole team; the Tagged quick view and search both pick them up. Keyword & Category columns (from Sellery) are available via the Columns menu and searchable - e.g. type "golf" to pull every golf item. `+
+  `"Winter" quick view uses product titles/keywords + Sellery CAT codes - refine once David supplies the code legend. Notes save live for the whole team.`;
+render();
+</script>
+<script src="supabase.min.js"></script>
+<script>
+const sb = supabase.createClient('https://ycpuazaitviokvdogvfe.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljcHVhemFpdHZpb2t2ZG9ndmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MzM5OTgsImV4cCI6MjEwMzUwOTk5OH0.4B2VqUuNv7VN49fzK0iFSstBvCh0ZGYEMJqg7IHeziA');
+window.sb = sb;
+async function fetchAll(tries){
+  for (let i = 0; i < tries; i++) {
+    try {
+      const [snap, ov, nts] = await Promise.all([
+        sb.from('dashboard_snapshot').select('data,updated_at').eq('id', 1).single(),
+        sb.from('overrides').select('*'),
+        sb.from('notes').select('*'),
+      ]);
+      if (!snap.error) return [snap, ov, nts];
+    } catch (e) { /* network hiccup - retry */ }
+    await new Promise(r => setTimeout(r, 1200 * (i + 1)));
+  }
+  return null;
+}
+async function boot(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { document.getElementById('loginOverlay').style.display='flex'; return; }
+  document.getElementById('liErr').textContent = 'Loading data...';
+  const res = await fetchAll(4);
+  if (!res) { document.getElementById('liErr').textContent = 'Data load failed - check connection and retry'; return; }
+  const [snap, ov, nts] = res;
+  window.__FJ_DATA__ = snap.data.data;
+  window.__FJ_TAGS__ = {}; window.__FJ_COSTS__ = {}; window.__FJ_NOTES__ = {};
+  (ov.data || []).forEach(o => {
+    if (o.tags != null && o.tags !== '') window.__FJ_TAGS__[o.asin] = o.tags;
+    if (o.cost != null) window.__FJ_COSTS__[o.asin] = Number(o.cost);
+  });
+  (nts.data || []).forEach(n => window.__FJ_NOTES__[n.asin] = { note: n.note, by: n.by, at: n.at });
+  window.__FJ_USER__ = session.user.email;
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appwrap').style.visibility = 'visible';
+  new Function(document.getElementById('mainjs').textContent)();
+}
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  document.getElementById('liErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('liEmail').value.trim(),
+    password: document.getElementById('liPass').value });
+  if (error) { document.getElementById('liErr').textContent = 'Wrong email or password'; return; }
+  boot();
+});
+document.getElementById('signout').addEventListener('click', async e => {
+  e.preventDefault(); await sb.auth.signOut(); location.reload();
+});
+boot();
+</script></body></html>
