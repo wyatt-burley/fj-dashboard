@@ -198,7 +198,7 @@ def run_fast():
         a = inv['asin'] or meta.get(sku, {}).get('a')
         if not a: continue
         r = by_asin.setdefault(a, {'asin': a, 'name': inv['productName'], 'inv': 0, 'inbound': 0,
-            'u7': 0, 'u30': 0, 'sales': 0.0, 'price': None, 'aged': [0,0,0,0,0],
+            'u7': 0, 'u30': 0, 'fba30': 0, 'sales': 0.0, 'price': None, 'aged': [0,0,0,0,0],
             'ais': 0.0, 'fbm': 0, 'costs': [], 'kw': set(), 'cats': set(), 'categories': set(),
             'skus': set(), 'added': None})
         r['name'] = r['name'] or inv['productName']
@@ -207,6 +207,7 @@ def run_fast():
         r['skus'].add(sku)
         p = planning.get(sku)
         if p:
+            r['fba30'] += p['units30d']
             r['u30'] += p['units30d']; r['u7'] += p['units7d']
             if p['price']: r['price'] = max(r['price'] or 0, p['price'])
             r['sales'] += p['units30d'] * (p['price'] or 0)
@@ -229,14 +230,23 @@ def run_fast():
         if a in ac30u: r['u30'] = ac30u[a]
         if ac30r.get(a, 0) > 0: r['sales'] = ac30r[a]
         if a in ac7u: r['u7'] = ac7u[a]
-        if r['sales'] < 1000: continue
+        u365 = units365.get(a, 0) or 0
+        # include every "active" ASIN: any sales in 12mo, or any stock anywhere
+        if not (r['sales'] > 0 or r['u30'] > 0 or u365 > 0 or r['inv'] > 0
+                or r['fbm'] > 0 or r['inbound'] > 0):
+            continue
         daily = r['u30'] / 30
         u1 = day_units.get(a, 0)
-        u365 = units365.get(a, 0) or 0
         fba_days = round(r['inv'] / daily, 1) if daily > 0 else (999 if r['inv'] else 0)
         comb_days = round((r['inv'] + r['fbm']) / daily, 1) if daily > 0 else (999 if r['inv']+r['fbm'] else 0)
         incl_inb = round((r['inv'] + r['inbound']) / daily, 1) if daily > 0 else 999
+        # FBM-only listing: no FBA stock, inbound, shipped units or age history,
+        # but FBM stock covers it -> not an FBA stockout, don't flag it.
+        fbm_only = (r['inv'] == 0 and r['inbound'] == 0 and r['fbm'] > 0
+                    and r['fba30'] == 0 and sum(r['aged']) == 0)
         tier = 'OUT' if r['inv'] == 0 else 'CRITICAL' if fba_days < 7 else 'LOW' if fba_days < 14 else 'OK'
+        if fbm_only:
+            tier, fba_days = 'OK', None
         risk = 'OK' if tier == 'OK' else ('AT_RISK' if comb_days < 14 and incl_inb < 14 else 'BUFFERED')
         cost = statistics.median(r['costs']) if r['costs'] else (statistics.median(cost_by_asin[a]) if cost_by_asin.get(a) else None)
         asp = r['sales'] / r['u30'] if r['u30'] else None
@@ -252,11 +262,13 @@ def run_fast():
             'kw': ' '.join(sorted(k for k in r['kw'] if k))[:120],
             'category': ', '.join(sorted(r['categories'], key=str.lower))[:120],
             'tags': ('winter' if is_winter else ''), 'skuList': ' '.join(sorted(r['skus']))[:400],
-            'added': r['added'], 'winter': is_winter, 'trend': trend})
-    rows.sort(key=lambda r: -r['sales'])
+            'added': r['added'], 'winter': is_winter, 'trend': trend,
+            'top': r['sales'] >= 1000, 'fbmOnly': fbm_only})
+    rows.sort(key=lambda r: (-r['sales'], -r['inv']))
 
-    # -- image refresh for new ASINs (catalog batch of 20)
-    missing = [r['asin'] for r in rows if not r['img']]
+    # -- image refresh for new ASINs (catalog batch of 20; '' marks known-missing
+    #    so unfetchable ASINs aren't re-requested every run)
+    missing = [r['asin'] for r in rows if not r['img'] and r['asin'] not in images]
     if missing:
         print('fetching images for', len(missing), 'new ASINs...', flush=True)
         for i in range(0, len(missing), 20):
@@ -269,34 +281,39 @@ def run_fast():
                     imgs = (it.get('images') or [{}])[0].get('images') or []
                     small = min(imgs, key=lambda im: im.get('width', 9999), default=None)
                     if small: images[it['asin']] = small['link']
+                for a in batch:
+                    images.setdefault(a, '')
             except Exception as e:
                 print('  image batch failed:', str(e)[:120], flush=True)
             time.sleep(1.2)
         state_put('images', images)
         for r in rows:
-            r['img'] = r['img'] or images.get(r['asin'])
+            r['img'] = r['img'] or images.get(r['asin']) or None
 
-    priced = [r for r in rows if r['gm'] is not None]
+    # KPI cards keep their "top sellers ($1K+/30d)" meaning; the scope toggle in
+    # the app recomputes chip counts client-side for the all-ASIN view.
+    top = [r for r in rows if r['top']]
+    priced = [r for r in top if r['gm'] is not None]
     cutoff6mo = (today - datetime.timedelta(days=183)).isoformat()
     aged_totals = [sum(p['aged'][k] for p in planning.values()) for k in
                    ['d0_90','d91_180','d181_270','d271_365','d365plus']]
     summary = {
       'generated': today.strftime('%b %d, %Y'), 'windowDays': 30, 'salesThreshold': 1000,
       'coverFlagDays': 14, 'criticalDays': 7, 'dayDate': day, 'newCutoff': cutoff6mo,
-      'topCount': len(rows),
-      'flaggedCount': sum(1 for r in rows if r['tier'] != 'OK'),
-      'outCount': sum(1 for r in rows if r['tier'] == 'OUT'),
-      'criticalCount': sum(1 for r in rows if r['tier'] == 'CRITICAL'),
-      'lowCount': sum(1 for r in rows if r['tier'] == 'LOW'),
-      'okCount': sum(1 for r in rows if r['tier'] == 'OK'),
-      'atRiskCount': sum(1 for r in rows if r['risk'] == 'AT_RISK'),
-      'bufferedCount': sum(1 for r in rows if r['risk'] == 'BUFFERED'),
-      'revAtRisk': round(sum(r['sales'] for r in rows if r['risk'] == 'AT_RISK'), 2),
-      'revBuffered': round(sum(r['sales'] for r in rows if r['risk'] == 'BUFFERED'), 2),
+      'topCount': len(top), 'allCount': len(rows),
+      'flaggedCount': sum(1 for r in top if r['tier'] != 'OK'),
+      'outCount': sum(1 for r in top if r['tier'] == 'OUT'),
+      'criticalCount': sum(1 for r in top if r['tier'] == 'CRITICAL'),
+      'lowCount': sum(1 for r in top if r['tier'] == 'LOW'),
+      'okCount': sum(1 for r in top if r['tier'] == 'OK'),
+      'atRiskCount': sum(1 for r in top if r['risk'] == 'AT_RISK'),
+      'bufferedCount': sum(1 for r in top if r['risk'] == 'BUFFERED'),
+      'revAtRisk': round(sum(r['sales'] for r in top if r['risk'] == 'AT_RISK'), 2),
+      'revBuffered': round(sum(r['sales'] for r in top if r['risk'] == 'BUFFERED'), 2),
       'blendedGM': round(sum(r['sales']*r['gm'] for r in priced)/sum(r['sales'] for r in priced), 3) if priced else None,
       'marginAtRisk': round(sum(r['sales']*r['gm'] for r in priced if r['risk']=='AT_RISK'), 2),
       'inboundTotal': sum(s['inboundWorking']+s['inboundShipped']+s['inboundReceiving'] for s in skus.values()),
-      'flaggedWithInbound': sum(1 for r in rows if r['tier']!='OK' and r['inbound']>0),
+      'flaggedWithInbound': sum(1 for r in top if r['tier']!='OK' and r['inbound']>0),
     }
     data = {'summary': summary, 'rows': rows, 'months': months,
             'aged': aged_totals, 'ltsf': round(sum(p['ais'] for p in planning.values()), 1),

@@ -131,6 +131,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   </div>
 </div>
 
+<div class="quickrow" id="scoperow"></div>
 <div class="toolbar">
   <div class="filters" id="filters"></div>
   <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword...">
@@ -258,24 +259,52 @@ document.getElementById('colBtn').onclick=e=>{colPop.style.display=colPop.style.
 document.addEventListener('click',e=>{if(!colPop.contains(e.target)&&e.target.id!=='colBtn')colPop.style.display='none';});
 
 /* ---- filters ---- */
-const tierFilters=[['FLAGGED','#1b2333',S.flaggedCount],['AT RISK','#a4161a',S.atRiskCount],['OUT','#912018',S.outCount],['CRITICAL','#d4541a',S.criticalCount],['LOW','#cc9a00',S.lowCount],['ALL','#5b6678',S.topCount]];
-let curFilter='FLAGGED',curSearch='',sortK='fbaDays',sortAsc=true,quick=null;
-document.getElementById('filters').innerHTML=tierFilters.map(t=>
-  `<button class="fbtn" data-f="${t[0]}"><span class="dot" style="background:${t[1]}"></span>${t[0]} <span class="cnt">${t[2]}</span></button>`).join('');
-document.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{curFilter=b.dataset.f;render()});
+let curScope='top',curFilter='FLAGGED',curSearch='',sortK='fbaDays',sortAsc=true,quick=null;
+function baseRows(){return curScope==='top'?R.filter(r=>r.top!==false):R.slice();}
+const tierDefs=[['FLAGGED','#1b2333',r=>r.tier!=='OK'],['AT RISK','#a4161a',r=>r.risk==='AT_RISK'],['OUT','#912018',r=>r.tier==='OUT'],['CRITICAL','#d4541a',r=>r.tier==='CRITICAL'],['LOW','#cc9a00',r=>r.tier==='LOW'],['ALL','#5b6678',r=>true]];
+function renderTierChips(){
+  const B=baseRows();
+  document.getElementById('filters').innerHTML=tierDefs.map(t=>
+    `<button class="fbtn" data-f="${t[0]}"><span class="dot" style="background:${t[1]}"></span>${t[0]} <span class="cnt">${B.filter(t[2]).length.toLocaleString()}</span></button>`).join('');
+  document.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{curFilter=b.dataset.f;render()});
+}
+renderTierChips();
+const scopeDefs=[['top','Top sellers ($1K+/30d)'],['all','All active ASINs']];
+function renderScope(){
+  const sr=document.getElementById('scoperow');
+  sr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Scope';sr.appendChild(lbl);
+  const hasScopes=R.some(r=>r.top===false);
+  if(!hasScopes){sr.style.display='none';return;}
+  scopeDefs.forEach(([k,label])=>{
+    const b=document.createElement('button');b.className='qbtn'+(curScope===k?' active':'');b.type='button';
+    const n=(k==='top'?R.filter(r=>r.top!==false):R).length;
+    b.innerHTML=esc(label)+' <span class="cnt">'+n.toLocaleString()+'</span>';
+    b.onclick=()=>{if(curScope!==k){curScope=k;renderScope();renderTierChips();renderQuickBtns();renderTagChips();render();}};
+    sr.appendChild(b);
+  });
+}
 const QUICK=[
   ['sold5','Sold 5+ yesterday',r=>r.u1>=5],
   ['winterSold','Winter sold yesterday',r=>r.winter&&r.u1>0],
   ['new6','New (last 6 mo)',r=>(r.added||'')>=S.newCutoff],
   ['hasInb','Stock en route',r=>r.inbound>0],
-  ['noFBM','No FBM backup',r=>r.fbm===0&&r.tier!=='OK']];
+  ['noFBM','No FBM backup',r=>r.fbm===0&&r.tier!=='OK'],
+  ['fbmOnly','FBM-only',r=>!!r.fbmOnly]];
 const qr=document.getElementById('quickrow');
-QUICK.forEach(([k,label,fn])=>{
-  const b=document.createElement('button');b.className='qbtn';b.type='button';
-  b.innerHTML=esc(label)+' <span class="cnt">'+R.filter(fn).length+'</span>';
-  b.onclick=()=>{quick=quick===k?null:k;document.querySelectorAll('.qbtn').forEach(x=>x.classList.remove('active'));if(quick)b.classList.add('active');render();};
-  b.dataset.q=k;qr.appendChild(b);
-});
+function renderQuickBtns(){
+  qr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Quick views';qr.appendChild(lbl);
+  const B=baseRows();
+  QUICK.forEach(([k,label,fn])=>{
+    const b=document.createElement('button');b.className='qbtn'+(quick===k?' active':'');b.type='button';
+    b.innerHTML=esc(label)+' <span class="cnt">'+B.filter(fn).length.toLocaleString()+'</span>';
+    b.onclick=()=>{quick=quick===k?null:k;renderQuickBtns();render();};
+    b.dataset.q=k;qr.appendChild(b);
+  });
+}
+renderQuickBtns();
+renderScope();
 document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
 
 /* ---- per-tag filter chips (dynamic) ---- */
@@ -286,7 +315,7 @@ function renderTagChips(){
   tr.replaceChildren();
   const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Tags';tr.appendChild(lbl);
   const counts={};
-  R.forEach(r=>effTags(r).forEach(t=>counts[t]=(counts[t]||0)+1));
+  baseRows().forEach(r=>effTags(r).forEach(t=>counts[t]=(counts[t]||0)+1));
   const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
   if(!names.length){const m=document.createElement('span');m.className='muted';m.style.fontSize='12px';m.textContent='Type a tag on any row (e.g. best, winter) and it becomes a filter here.';tr.appendChild(m);}
   names.forEach(t=>{
@@ -379,7 +408,7 @@ function render(){
   const shown=COLS.filter(c=>visible[c[0]]);
   document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
     `<th data-k="${k}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}</th>`).join('');
-  let rows=R.slice();
+  let rows=baseRows();
   if(curFilter==='FLAGGED')rows=rows.filter(r=>r.tier!=='OK');
   else if(curFilter==='AT RISK')rows=rows.filter(r=>r.risk==='AT_RISK');
   else if(curFilter!=='ALL')rows=rows.filter(r=>r.tier===curFilter);
@@ -393,7 +422,9 @@ function render(){
     else if(sortK==='name'||sortK==='asin'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'').toLowerCase();y=(b[sortK]||'').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
     else{x=a[sortK]==null?1e9:a[sortK];y=b[sortK]==null?1e9:b[sortK]}
     return sortAsc?x-y:y-x;});
-  document.getElementById('count').textContent=rows.length+' ASINs';
+  const totalRows=rows.length,MAXR=500;
+  document.getElementById('count').textContent=totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':'');
+  if(totalRows>MAXR)rows=rows.slice(0,MAXR);
   let html='';
   for(const r of rows){
     html+='<tr class="mainrow">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
