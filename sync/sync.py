@@ -119,27 +119,33 @@ def run_fast():
         }
     print(' ', len(skus), 'SKUs', flush=True)
 
-    # -- create all reports up front (429-paced), then collect
+    # -- create all reports up front (429-paced), then collect.
+    #    A report that can't be created (Amazon throttling storm) is skipped:
+    #    the run continues and the affected numbers fall back gracefully.
+    def try_create(*args, **kw):
+        try:
+            return spapi.create_report(*args, **kw)
+        except Exception as e:
+            print('  createReport skipped:', str(e)[:150], flush=True)
+            return None
     print('creating reports...', flush=True)
-    rid_planning = spapi.create_report('GET_FBA_INVENTORY_PLANNING_DATA')
-    rid_fbm = spapi.create_report('GET_MERCHANT_LISTINGS_ALL_DATA')
+    rid_planning = try_create('GET_FBA_INVENTORY_PLANNING_DATA')
+    rid_fbm = try_create('GET_MERCHANT_LISTINGS_ALL_DATA')
     day = (today - datetime.timedelta(days=2)).isoformat()
-    rid_1d = spapi.create_report('GET_SALES_AND_TRAFFIC_REPORT',
-        {'dateGranularity': 'DAY', 'asinGranularity': 'CHILD'},
+    st_opts = {'dateGranularity': 'DAY', 'asinGranularity': 'CHILD'}
+    rid_1d = try_create('GET_SALES_AND_TRAFFIC_REPORT', st_opts,
         day + 'T00:00:00Z', day + 'T23:59:59Z')
     end30 = today - datetime.timedelta(days=2)
     start30 = end30 - datetime.timedelta(days=29)
-    rid_30 = spapi.create_report('GET_SALES_AND_TRAFFIC_REPORT',
-        {'dateGranularity': 'DAY', 'asinGranularity': 'CHILD'},
+    rid_30 = try_create('GET_SALES_AND_TRAFFIC_REPORT', st_opts,
         start30.isoformat() + 'T00:00:00Z', end30.isoformat() + 'T23:59:59Z')
     start7 = end30 - datetime.timedelta(days=6)
-    rid_7 = spapi.create_report('GET_SALES_AND_TRAFFIC_REPORT',
-        {'dateGranularity': 'DAY', 'asinGranularity': 'CHILD'},
+    rid_7 = try_create('GET_SALES_AND_TRAFFIC_REPORT', st_opts,
         start7.isoformat() + 'T00:00:00Z', end30.isoformat() + 'T23:59:59Z')
 
     print('planning report...', flush=True)
     planning = {}
-    raw = spapi.fetch_report(rid_planning)
+    raw = spapi.fetch_report(rid_planning) if rid_planning else None
     if raw:
         for g in tsv_rows(raw):
             sku = g('sku')
@@ -161,7 +167,7 @@ def run_fast():
 
     print('FBM listings report...', flush=True)
     fbm_by_sku = {}
-    raw = spapi.fetch_report(rid_fbm)
+    raw = spapi.fetch_report(rid_fbm) if rid_fbm else None
     if raw:
         for g in tsv_rows(raw, 'cp1252'):
             sku = g('seller-sku')
@@ -171,11 +177,11 @@ def run_fast():
     print(' ', len(fbm_by_sku), 'FBM listings', flush=True)
 
     print('sales & traffic 1d/7d/30d...', flush=True)
-    raw = spapi.fetch_report(rid_1d)
+    raw = spapi.fetch_report(rid_1d) if rid_1d else None
     day_units = st_units(raw)[0] if raw else {}
-    raw = spapi.fetch_report(rid_30)
+    raw = spapi.fetch_report(rid_30) if rid_30 else None
     ac30u, ac30r = st_units(raw) if raw else ({}, {})
-    raw = spapi.fetch_report(rid_7)
+    raw = spapi.fetch_report(rid_7) if rid_7 else None
     ac7u = st_units(raw)[0] if raw else {}
     print(f'  1d:{len(day_units)} 30d:{len(ac30u)} 7d:{len(ac7u)} ASINs', flush=True)
 

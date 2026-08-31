@@ -55,7 +55,7 @@ def get_all_pages(path, params, list_key, next_token_param='nextToken',
         params = {**params, next_token_param: nt}
         time.sleep(pause)
 
-def create_report(report_type, options=None, start=None, end=None, tries=8):
+def create_report(report_type, options=None, start=None, end=None, tries=15):
     """Create a report, retrying 429s (createReport is ~1/min)."""
     spec = {'reportType': report_type, 'marketplaceIds': [MARKETPLACE_ID]}
     if options: spec['reportOptions'] = options
