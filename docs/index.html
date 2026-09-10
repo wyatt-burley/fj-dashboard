@@ -48,8 +48,27 @@ input.who{border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:
 .colpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:10px 14px;display:none;columns:2;gap:18px;min-width:320px}
 .colpop label{display:block;font-size:12.5px;padding:3px 0;white-space:nowrap;cursor:pointer;break-inside:avoid}
 .colwrap{position:relative;flex:none}
-.tablewrap{background:#fff;border:1px solid #e6eaf1;border-radius:10px;overflow:auto}
-table{border-collapse:collapse;width:100%}
+td.stick,th.stick{position:sticky;background:#fff;z-index:3}
+th.stick{z-index:6;background:#fafbfd}
+td.stick-last,th.stick-last{box-shadow:inset -1px 0 0 #e6eaf1}
+tr.mainrow:hover td.stick{background:#f8faff}
+.filtpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:14px 16px;display:none;min-width:520px}
+.filtpop .frow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.filtpop select,.filtpop input{border:1px solid #d6dce6;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit;background:#fff}
+.filtpop select.ffield{width:170px}.filtpop select.fop{width:120px}.filtpop input.fval{width:130px}
+.filtpop .fdel{border:none;background:none;color:#a7b0c0;cursor:pointer;font-size:15px;padding:2px 5px}
+.filtpop .fdel:hover{color:#a4161a}
+.filtpop .fand{font-size:11px;font-weight:700;color:#8b95a7;width:20px;text-align:center}
+.filtpop .fadd{border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12.5px;font-weight:600;padding:4px 0}
+.filtpop .fbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.filtpop .fcancel{border:1px solid #d6dce6;background:#fff;border-radius:7px;padding:7px 16px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263}
+.filtpop .fapply{border:none;background:#1b2333;color:#fff;border-radius:7px;padding:7px 18px;font-size:12.5px;cursor:pointer;font-weight:700}
+.filtpop .fhint{font-size:11px;color:#8b95a7;margin-bottom:10px}
+.colbtn .cnt2{background:#1b2333;color:#fff;border-radius:10px;padding:1px 7px;font-size:10.5px;margin-left:5px}
+.vchip .vx{margin-left:4px;color:#a7b0c0;font-weight:700}
+.vchip .vx:hover{color:#a4161a}
+.tablewrap{background:#fff;border:1px solid #e6eaf1;border-radius:10px;overflow:auto;max-height:74vh;overscroll-behavior:contain}
+table{border-collapse:separate;border-spacing:0;width:100%}
 th,td{text-align:left;padding:8px 9px;border-bottom:1px solid #eef1f6;white-space:nowrap}
 th{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#7a8499;cursor:pointer;user-select:none;background:#fafbfd;position:sticky;top:0;z-index:5}
 th.r,td.r{text-align:right}
@@ -136,10 +155,13 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   <div class="filters" id="filters"></div>
   <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword...">
   <input class="who" id="whoami" placeholder="Your name (for notes)">
+  <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
   <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
+  <button class="colbtn" id="csvBtn" type="button" title="Download the rows currently shown (after filters) as a spreadsheet">Export CSV</button>
 </div>
 <div class="quickrow" id="quickrow"><span class="qlbl">Quick views</span></div>
 <div class="quickrow" id="tagrow"></div>
+<div class="quickrow" id="viewsrow"></div>
 <div class="quickrow"><button class="qbtn" id="legendBtn" type="button" style="border-style:solid;background:#fff;color:#485263">How the flags work &#9662;</button></div>
 <div id="legendBox" style="display:none;background:#fbfcfe;border:1px dashed #b9c6da;border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.8;color:#3a4657;margin-bottom:12px">
 <b>Velocity</b> = trailing-30-day units (all channels, FBA + FBM) &divide; 30 = units/day.<br>
@@ -275,7 +297,7 @@ function renderColPop(){
   });
 }
 renderColPop();
-document.getElementById('colBtn').onclick=e=>{colPop.style.display=colPop.style.display==='block'?'none':'block';e.stopPropagation();};
+document.getElementById('colBtn').onclick=e=>{const fp=document.getElementById('filtPop');if(fp)fp.style.display='none';colPop.style.display=colPop.style.display==='block'?'none':'block';e.stopPropagation();};
 document.addEventListener('click',e=>{if(!colPop.contains(e.target)&&e.target.id!=='colBtn')colPop.style.display='none';});
 
 /* ---- filters ---- */
@@ -327,6 +349,168 @@ function renderQuickBtns(){
 renderQuickBtns();
 renderScope();
 document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
+
+/* ---- condition filters (build-your-own) ---- */
+const FIELDS=[
+ ['sales','30d Sales $','num'],['u1','1-Day units','num'],['u7','7-Day units','num'],['u30','30-Day units','num'],
+ ['u365','12-Mo units','num'],['daily','Units/day','num'],['inv','FBA Inv','num'],['fbaDays','FBA Days','num'],
+ ['fbm','FBM Inv','num'],['inbound','Inbound','num'],['combDays','Total Days','num'],['price','Price','num'],
+ ['cost','Unit Cost','num'],['gm','GM %','num'],['name','Product name','text'],['asin','ASIN','text'],
+ ['kw','Keyword','text'],['category','Category','text'],['tags','Tags','text']];
+const NOPS=[['gt','>'],['gte','>='],['lt','<'],['lte','<='],['eq','='],['ne','!=']];
+const TOPS=[['has','contains'],['nhas',"doesn't contain"],['is','is'],['isnot','is not']];
+let CONDS=[],condDraft=[];
+function fval(r,f){
+  if(f==='cost')return COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:r.cost;
+  if(f==='gm'){const g=r._gm!=null?r._gm:r.gm;return g==null?null:Math.round(g*1000)/10;}
+  if(f==='tags')return effTags(r).join(', ');
+  return r[f];
+}
+function condTest(r,c){
+  const t=(FIELDS.find(x=>x[0]===c.f)||[])[2],v=fval(r,c.f);
+  if(t==='num'){const n=Number(c.v);if(isNaN(n))return true;if(v==null)return c.op==='ne';
+    return c.op==='gt'?v>n:c.op==='gte'?v>=n:c.op==='lt'?v<n:c.op==='lte'?v<=n:c.op==='eq'?v===n:v!==n;}
+  const s=String(v==null?'':v).toLowerCase(),q=String(c.v||'').toLowerCase();
+  return c.op==='has'?s.includes(q):c.op==='nhas'?!s.includes(q):c.op==='is'?s===q:s!==q;
+}
+const filtPop=document.getElementById('filtPop'),filtBtn=document.getElementById('filtBtn');
+function renderFiltPop(){
+  filtPop.replaceChildren();
+  const hint=document.createElement('div');hint.className='fhint';hint.textContent='Show only rows matching ALL of these (works together with the chips, quick views, tags and search).';filtPop.appendChild(hint);
+  if(!condDraft.length)condDraft.push({f:'sales',op:'gt',v:''});
+  condDraft.forEach((c,i)=>{
+    const row=document.createElement('div');row.className='frow';
+    const and=document.createElement('span');and.className='fand';and.textContent=i?'&':'';row.appendChild(and);
+    const fs=document.createElement('select');fs.className='ffield';
+    FIELDS.forEach(([k,l])=>{const o=document.createElement('option');o.value=k;o.textContent=l;if(c.f===k)o.selected=true;fs.appendChild(o);});
+    fs.onchange=()=>{c.f=fs.value;const t=FIELDS.find(x=>x[0]===c.f)[2];c.op=t==='num'?'gt':'has';c.v='';renderFiltPop();};
+    row.appendChild(fs);
+    const t=FIELDS.find(x=>x[0]===c.f)[2];
+    const os=document.createElement('select');os.className='fop';
+    (t==='num'?NOPS:TOPS).forEach(([k,l])=>{const o=document.createElement('option');o.value=k;o.textContent=l;if(c.op===k)o.selected=true;os.appendChild(o);});
+    os.onchange=()=>c.op=os.value;row.appendChild(os);
+    const vi=document.createElement('input');vi.className='fval';vi.value=c.v==null?'':c.v;
+    vi.type=t==='num'?'number':'text';vi.placeholder=t==='num'?'value':'text...';
+    vi.oninput=()=>c.v=vi.value;
+    vi.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();applyConds();}};
+    row.appendChild(vi);
+    const del=document.createElement('button');del.className='fdel';del.type='button';del.textContent='✕';del.title='Remove condition';
+    del.onclick=()=>{condDraft.splice(i,1);renderFiltPop();};row.appendChild(del);
+    filtPop.appendChild(row);
+  });
+  const add=document.createElement('button');add.className='fadd';add.type='button';add.textContent='+ Add condition';
+  add.onclick=()=>{condDraft.push({f:'sales',op:'gt',v:''});renderFiltPop();};filtPop.appendChild(add);
+  const btns=document.createElement('div');btns.className='fbtns';
+  const clr=document.createElement('button');clr.className='fcancel';clr.type='button';clr.textContent='Clear all';
+  clr.onclick=()=>{condDraft=[];CONDS=[];filtPop.style.display='none';syncFiltBtn();render();};
+  const can=document.createElement('button');can.className='fcancel';can.type='button';can.textContent='Cancel';
+  can.onclick=()=>{filtPop.style.display='none';};
+  const ap=document.createElement('button');ap.className='fapply';ap.type='button';ap.textContent='Apply';
+  ap.onclick=applyConds;
+  btns.append(clr,can,ap);filtPop.appendChild(btns);
+}
+function applyConds(){
+  CONDS=condDraft.filter(c=>c.v!==''&&c.v!=null).map(c=>({...c}));
+  filtPop.style.display='none';syncFiltBtn();render();
+}
+function syncFiltBtn(){filtBtn.innerHTML='Filters ▾'+(CONDS.length?'<span class="cnt2">'+CONDS.length+'</span>':'');}
+filtBtn.onclick=e=>{e.stopPropagation();
+  const open=filtPop.style.display==='block';
+  document.getElementById('colPop').style.display='none';
+  if(!open){condDraft=CONDS.length?CONDS.map(c=>({...c})):[];renderFiltPop();filtPop.style.display='block';}
+  else filtPop.style.display='none';};
+document.addEventListener('click',e=>{if(e.target.isConnected&&!filtPop.contains(e.target)&&e.target!==filtBtn)filtPop.style.display='none';});
+
+/* ---- my views (personal saved views - each person sees only their own) ---- */
+let MYVIEWS=[],activeView=null;
+function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc};}
+function applyView(v){
+  const d=v.def||{};
+  curScope=d.scope||'top';curFilter=d.tier||'FLAGGED';quick=d.quick||null;curTag=d.tag||null;
+  curSearch=d.search||'';document.getElementById('search').value=curSearch;
+  CONDS=(d.conds||[]).map(c=>({...c}));syncFiltBtn();
+  if(d.sortK){sortK=d.sortK;sortAsc=!!d.sortAsc;}
+  activeView=v.id;
+  renderScope();renderStats();renderTierChips();renderQuickBtns();renderViews();render();
+}
+function persistLocalViews(){try{localStorage.setItem('fj_views',JSON.stringify(MYVIEWS));}catch(e){}}
+function loadViews(){
+  if(window.sb){window.sb.from('saved_views').select('id,name,def').order('created_at')
+    .then(({data})=>{MYVIEWS=data||[];renderViews();}).catch(()=>{});}
+  else{try{MYVIEWS=JSON.parse(localStorage.getItem('fj_views')||'[]');}catch(e){MYVIEWS=[];}renderViews();}
+}
+function saveCurrentView(){
+  const name=prompt('Name this view (only you will see it):');
+  if(!name||!name.trim())return;
+  const def=viewDef();
+  if(window.sb){window.sb.from('saved_views').insert({name:name.trim(),def:def}).select('id,name,def')
+    .then(({data,error})=>{if(error||!data||!data.length){alert('Could not save the view - try again.');return;}
+      MYVIEWS.push(data[0]);activeView=data[0].id;renderViews();});}
+  else{const v={id:'l'+Date.now(),name:name.trim(),def:def};MYVIEWS.push(v);persistLocalViews();activeView=v.id;renderViews();}
+}
+function deleteView(v){
+  if(!confirm('Delete your view "'+v.name+'"?'))return;
+  MYVIEWS=MYVIEWS.filter(x=>x.id!==v.id);
+  if(activeView===v.id)activeView=null;
+  if(window.sb)window.sb.from('saved_views').delete().eq('id',v.id).then(()=>{});
+  else persistLocalViews();
+  renderViews();
+}
+function renderViews(){
+  const vr=document.getElementById('viewsrow');vr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='My views';vr.appendChild(lbl);
+  MYVIEWS.forEach(v=>{
+    const b=document.createElement('button');b.className='qbtn vchip'+(activeView===v.id?' active':'');b.type='button';
+    b.title='Apply this saved view';
+    b.appendChild(document.createTextNode(v.name+' '));
+    const x=document.createElement('span');x.className='vx';x.textContent='✕';x.title='Delete this view';
+    x.onclick=e=>{e.stopPropagation();deleteView(v);};b.appendChild(x);
+    b.onclick=()=>applyView(v);
+    vr.appendChild(b);
+  });
+  const sv=document.createElement('button');sv.className='qbtn';sv.type='button';
+  sv.textContent='+ Save current view';
+  sv.title='Saves the current scope, chip, quick view, tag, search, filters and sort as a one-click view only you can see';
+  sv.onclick=saveCurrentView;vr.appendChild(sv);
+}
+renderViews();loadViews();
+
+/* ---- CSV export of the current (filtered) rows ---- */
+function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+document.getElementById('csvBtn').onclick=()=>{
+  const cols=['asin','name','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','tier','risk','kw','category','note'];
+  const lines=[cols.join(',')];
+  filteredRows().forEach(r=>{
+    const g=r._gm!=null?r._gm:r.gm;
+    lines.push([r.asin,csvEsc(r.name),csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
+      r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
+      g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
+      r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r.tier,r.risk,
+      csvEsc(r.kw||''),csvEsc(r.category||''),csvEsc((typeof NOTES!=='undefined'&&NOTES[r.asin]||{}).note||'')].join(','));
+  });
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='fj-inventory-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+};
+
+/* ---- sticky left columns ---- */
+const STICKY=['img','tier','asin','name'];
+function stickify(){
+  const ths=[...document.querySelectorAll('#hrow th')];
+  let left=0;const offs={};
+  for(const th of ths){const k=th.dataset.k;
+    if(!STICKY.includes(k))break;
+    offs[k]=left;left+=th.offsetWidth;}
+  const keys=Object.keys(offs),last=keys[keys.length-1];
+  ths.forEach(th=>{const k=th.dataset.k;
+    if(k in offs){th.classList.add('stick');th.style.left=offs[k]+'px';th.classList.toggle('stick-last',k===last);}});
+  document.querySelectorAll('#tb td[data-c]').forEach(td=>{const k=td.dataset.c;
+    if(k in offs){td.classList.add('stick');td.style.left=offs[k]+'px';td.classList.toggle('stick-last',k===last);}});
+}
+
+/* header tooltips */
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, CRITICAL < 7 days, LOW 7-14, OK 14+',asin:'Amazon child ASIN',name:'Product title',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Units by month, trailing 12 months',notes:'Team notes - save live for everyone'};
 
 /* ---- per-tag filter chips (dynamic) ---- */
 let curTag=null;
@@ -425,10 +609,7 @@ function trendSVG(r){
   s+='</svg>';
   return s;
 }
-function render(){
-  const shown=COLS.filter(c=>visible[c[0]]);
-  document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
-    `<th data-k="${k}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}</th>`).join('');
+function filteredRows(){
   let rows=baseRows();
   if(curFilter==='FLAGGED')rows=rows.filter(r=>r.tier!=='OK');
   else if(curFilter==='AT RISK')rows=rows.filter(r=>r.risk==='AT_RISK');
@@ -436,6 +617,7 @@ function render(){
   if(quick){const fn=QUICK.find(q=>q[0]===quick)[2];rows=rows.filter(fn);}
   if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
   if(curSearch)rows=rows.filter(r=>(r.name+' '+r.asin+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase().includes(curSearch));
+  if(CONDS.length)rows=rows.filter(r=>CONDS.every(c=>condTest(r,c)));
   rows.sort((a,b)=>{let x,y;
     if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
     else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
@@ -443,6 +625,13 @@ function render(){
     else if(sortK==='name'||sortK==='asin'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'').toLowerCase();y=(b[sortK]||'').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
     else{x=a[sortK]==null?1e9:a[sortK];y=b[sortK]==null?1e9:b[sortK]}
     return sortAsc?x-y:y-x;});
+  return rows;
+}
+function render(){
+  const shown=COLS.filter(c=>visible[c[0]]);
+  document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
+    `<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}</th>`).join('');
+  let rows=filteredRows();
   const totalRows=rows.length,MAXR=500;
   document.getElementById('count').textContent=totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':'');
   if(totalRows>MAXR)rows=rows.slice(0,MAXR);
@@ -452,6 +641,7 @@ function render(){
     if(openTrend===r.asin)html+='<tr class="trendrow"><td colspan="'+shown.length+'"><b style="font-size:12px">'+esc(r.name.slice(0,80))+'</b> - units ordered by month (trailing 12)<br>'+trendSVG(r)+'</td></tr>';
   }
   document.getElementById('tb').innerHTML=html;
+  stickify();
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
   document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
     if(['img','trend','notes'].includes(k))return;
