@@ -128,6 +128,17 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
 <div class="wrap" id="appwrap" style="visibility:hidden">
 <div class="brandhead"><div class="brandtitle"><div class="eyebrow">Funky Junque</div><h1>FBA Inventory &amp; Restock</h1></div></div><div class="brandbar"></div>
 <a href="#" id="signout" style="float:right;margin-top:-46px;font-size:12px;color:#5b6678">Sign out</a>
+<a href="#" id="chpw" style="float:right;margin-top:-46px;margin-right:76px;font-size:12px;color:#5b6678">Change password</a>
+<div id="pwOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,30,50,.45);z-index:210;align-items:center;justify-content:center">
+  <form class="loginbox" id="pwForm">
+    <h2 style="margin:0 0 16px">Change password</h2>
+    <input type="password" id="pw1" placeholder="New password (8+ characters)" minlength="8" autocomplete="new-password" required>
+    <input type="password" id="pw2" placeholder="Repeat new password" autocomplete="new-password" required>
+    <div class="err" id="pwErr"></div>
+    <button type="submit">Save new password</button>
+    <button type="button" id="pwCancel" style="margin-top:8px;background:#fff;color:#485263;border:1px solid #d6dce6">Cancel</button>
+  </form>
+</div>
 <div class="sub" id="sub"></div>
 <div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API connected.</b> Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
 <div class="cards" id="cards"></div>
@@ -187,7 +198,7 @@ const money=n=>'$'+Math.round(n).toLocaleString();
 const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let TAG_EDITS=window.__FJ_TAGS__||{};
 document.getElementById('sub').innerHTML=
-  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>`;
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}`;
 
 /* KPI cards + charts recompute for the active scope; renderStats() is defined
    after the chart helpers and called from there. */
@@ -283,7 +294,7 @@ const COLS=[
   ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
   ['sales','30d Sales $',0],['daily','Units/day',0],
   ['inv','FBA Inv',1],['fbaDays','FBA Days',1],['fbm','FBM Inv',1],['inbound','Inbound',1],
-  ['combDays','Total Days',1],['risk','Sales Risk',1],['trend','Trend',1],['notes','Notes',1]];
+  ['combDays','Total Days',1],['restock','Restock Qty',1],['risk','Sales Risk',1],['trend','Trend',1],['notes','Notes',1]];
 let visible={};COLS.forEach(c=>visible[c[0]]=!!c[2]);
 try{const s=localStorage.getItem('fj_cols');if(s)visible=Object.assign(visible,JSON.parse(s));}catch(e){}
 const colPop=document.getElementById('colPop');
@@ -478,14 +489,14 @@ renderViews();loadViews();
 /* ---- CSV export of the current (filtered) rows ---- */
 function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 document.getElementById('csvBtn').onclick=()=>{
-  const cols=['asin','name','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','tier','risk','kw','category','note'];
+  const cols=['asin','name','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
   const lines=[cols.join(',')];
   filteredRows().forEach(r=>{
     const g=r._gm!=null?r._gm:r.gm;
     lines.push([r.asin,csvEsc(r.name),csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
       r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
       g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
-      r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r.tier,r.risk,
+      r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r._restock||0,r.tier,r.risk,
       csvEsc(r.kw||''),csvEsc(r.category||''),csvEsc((typeof NOTES!=='undefined'&&NOTES[r.asin]||{}).note||'')].join(','));
   });
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv'});
@@ -510,7 +521,24 @@ function stickify(){
 }
 
 /* header tooltips */
-const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, CRITICAL < 7 days, LOW 7-14, OK 14+',asin:'Amazon child ASIN',name:'Product title',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Units by month, trailing 12 months',notes:'Team notes - save live for everyone'};
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, CRITICAL < 7 days, LOW 7-14, OK 14+',asin:'Amazon child ASIN',name:'Product title',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Units by month, trailing 12 months',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x units/day - FBA on hand - inbound. Change the target under "How the flags work".'};
+
+/* ---- restock quantity suggestion ---- */
+let TARGET_DAYS=45;
+try{const t=Number(localStorage.getItem('fj_target'));if(t>=7&&t<=365)TARGET_DAYS=t;}catch(e){}
+function computeRestock(){
+  R.forEach(r=>{r._restock=(r.daily>0&&!r.fbmOnly)?Math.max(0,Math.ceil(r.daily*TARGET_DAYS-(r.inv+r.inbound))):0;});
+}
+computeRestock();
+
+/* ---- inline 12-mo sparkline ---- */
+function sparkSVG(r){
+  const v=r.trend||[];
+  if(!v.length||!v.some(x=>x>0))return '<span style="display:inline-block;width:52px"></span>';
+  const w=52,h=16,max=Math.max(...v);
+  const pts=v.map((x,i)=>((i/(v.length-1))*(w-2)+1).toFixed(1)+','+(h-1-(x/max)*(h-3)).toFixed(1)).join(' ');
+  return '<svg width="'+w+'" height="'+h+'" style="vertical-align:middle;margin-right:4px"><polyline points="'+pts+'" fill="none" stroke="#5598e7" stroke-width="1.5"/></svg>';
+}
 
 /* ---- per-tag filter chips (dynamic) ---- */
 let curTag=null;
@@ -586,8 +614,9 @@ function cellHTML(k,r){
     case 'fbm': return '<td class="r" data-c="fbm">'+r.fbm.toLocaleString()+'</td>';
     case 'inbound': return '<td class="r" data-c="inbound">'+(r.inbound?'<b>'+r.inbound.toLocaleString()+'</b>':'<span class="muted">-</span>')+'</td>';
     case 'combDays': return '<td class="r" data-c="combDays">'+dcell(r.combDays)+'</td>';
+    case 'restock': return '<td class="r" data-c="restock">'+(r._restock>0?'<b style="color:#1b6fd4">'+r._restock.toLocaleString()+'</b>':'<span class="muted">-</span>')+'</td>';
     case 'risk': return '<td data-c="risk">'+rcell(r.risk)+'</td>';
-    case 'trend': return '<td data-c="trend"><button class="trbtn'+(openTrend===r.asin?' open':'')+'" data-asin="'+esc(r.asin)+'" type="button">12-mo &#9660;</button></td>';
+    case 'trend': return '<td data-c="trend">'+sparkSVG(r)+'<button class="trbtn'+(openTrend===r.asin?' open':'')+'" data-asin="'+esc(r.asin)+'" type="button">&#9660;</button></td>';
     case 'notes': return '<td class="notes" data-c="notes">'+ncell(r.asin)+'</td>';
   }
   return '';
@@ -623,25 +652,36 @@ function filteredRows(){
     else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
     else if(sortK==='tags'){x=effTags(a).join(',')||'￿';y=effTags(b).join(',')||'￿';return sortAsc?(x<y?-1:1):(x>y?-1:1)}
     else if(sortK==='name'||sortK==='asin'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'').toLowerCase();y=(b[sortK]||'').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
-    else{x=a[sortK]==null?1e9:a[sortK];y=b[sortK]==null?1e9:b[sortK]}
+    else{const kk=sortK==='restock'?'_restock':sortK;x=a[kk]==null?1e9:a[kk];y=b[kk]==null?1e9:b[kk]}
     return sortAsc?x-y:y-x;});
   return rows;
 }
 function render(){
   const shown=COLS.filter(c=>visible[c[0]]);
   document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
-    `<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}</th>`).join('');
+    `<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}</th>`).join('');
   let rows=filteredRows();
   const totalRows=rows.length,MAXR=500;
-  document.getElementById('count').textContent=totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':'');
+  const cnt=document.getElementById('count');
+  const anyFilter=curFilter!=='FLAGGED'||quick||curTag||curSearch||CONDS.length;
+  cnt.innerHTML=esc(totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':''))
+    +(anyFilter?' <button id="clearAll" type="button" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:0 4px">&#10005; Clear all filters</button>':'');
+  const ca=document.getElementById('clearAll');if(ca)ca.onclick=resetAll;
   if(totalRows>MAXR)rows=rows.slice(0,MAXR);
   let html='';
+  if(!rows.length){
+    const nc=COLS.filter(c=>visible[c[0]]).length;
+    html='<tr><td colspan="'+nc+'" style="text-align:center;padding:36px;color:#8b95a7;font-size:13px">No products match the current filters.'
+      +' <button type="button" id="clearEmpty" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:13px;font-weight:600">Clear all filters</button></td></tr>';
+  }
   for(const r of rows){
     html+='<tr class="mainrow">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
     if(openTrend===r.asin)html+='<tr class="trendrow"><td colspan="'+shown.length+'"><b style="font-size:12px">'+esc(r.name.slice(0,80))+'</b> - units ordered by month (trailing 12)<br>'+trendSVG(r)+'</td></tr>';
   }
   document.getElementById('tb').innerHTML=html;
+  const ce=document.getElementById('clearEmpty');if(ce)ce.onclick=resetAll;
   stickify();
+  saveState();
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
   document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
     if(['img','trend','notes'].includes(k))return;
@@ -697,7 +737,50 @@ document.getElementById('foot').innerHTML=
   `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
   `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs from Sellery migration; prices & images live from Amazon. `+
   `<b>Tags</b> (e.g. "best") are editable labels shared with the whole team; the Tagged quick view and search both pick them up. Keyword & Category columns (from Sellery) are available via the Columns menu and searchable - e.g. type "golf" to pull every golf item. `+
-  `"Winter" quick view uses product titles/keywords + Sellery CAT codes - refine once David supplies the code legend. Notes save live for the whole team.`;
+  `"Winter" quick view uses product titles/keywords + Sellery CAT codes - refine once David supplies the code legend. Notes save live for the whole team. `+
+  `<b>Restock Qty</b> = ${TARGET_DAYS} days of cover x units/day - FBA on hand - inbound (change the target under "How the flags work").`;
+
+/* ---- reset + remembered state ---- */
+function resetAll(){
+  curFilter='FLAGGED';quick=null;curTag=null;curSearch='';CONDS=[];condDraft=[];activeView=null;
+  document.getElementById('search').value='';
+  syncFiltBtn();renderTierChips();renderQuickBtns();renderViews();render();
+}
+let _stateReady=false;
+function saveState(){
+  if(!_stateReady)return;
+  try{localStorage.setItem('fj_state',JSON.stringify({scope:curScope,tier:curFilter,quick:quick,tag:curTag,
+    search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc}));}catch(e){}
+}
+(function restoreState(){
+  try{
+    const s=JSON.parse(localStorage.getItem('fj_state')||'null');
+    if(s){
+      if(s.scope==='all'&&R.some(r=>r.top===false))curScope='all';
+      if(s.tier)curFilter=s.tier;
+      quick=s.quick||null;curTag=s.tag||null;
+      curSearch=s.search||'';document.getElementById('search').value=curSearch;
+      CONDS=Array.isArray(s.conds)?s.conds:[];
+      if(s.sortK){sortK=s.sortK;sortAsc=!!s.sortAsc;}
+      syncFiltBtn();renderScope();renderStats();renderTierChips();renderQuickBtns();
+    }
+  }catch(e){}
+  _stateReady=true;
+})();
+
+/* ---- restock target control (in the flags legend) ---- */
+(function tgtControl(){
+  const lb=document.getElementById('legendBox');
+  if(!lb)return;
+  const d=document.createElement('div');
+  d.innerHTML='<b>Restock target:</b> keep <input id="tgtDays" type="number" min="7" max="365" step="1" value="'+TARGET_DAYS+'" style="width:58px;border:1px solid #d6dce6;border-radius:6px;padding:3px 6px;font-size:12.5px;text-align:right"> days of FBA cover - drives the <b>Restock Qty</b> column (send-in suggestion per ASIN).';
+  lb.appendChild(d);
+  document.getElementById('tgtDays').addEventListener('change',e=>{
+    const v=Number(e.target.value);
+    if(v>=7&&v<=365){TARGET_DAYS=v;try{localStorage.setItem('fj_target',String(v));}catch(err){}
+      computeRestock();render();}
+  });
+})();
 render();
 </script>
 <script src="supabase.min.js"></script>
@@ -726,6 +809,7 @@ async function boot(){
   if (!res) { document.getElementById('liErr').textContent = 'Data load failed - check connection and retry'; return; }
   const [snap, ov, nts] = res;
   window.__FJ_DATA__ = snap.data.data;
+  window.__FJ_UPDATED__ = snap.data.updated_at;
   window.__FJ_TAGS__ = {}; window.__FJ_COSTS__ = {}; window.__FJ_NOTES__ = {};
   (ov.data || []).forEach(o => {
     if (o.tags != null && o.tags !== '') window.__FJ_TAGS__[o.asin] = o.tags;
@@ -745,6 +829,27 @@ document.getElementById('loginForm').addEventListener('submit', async e => {
     password: document.getElementById('liPass').value });
   if (error) { document.getElementById('liErr').textContent = 'Wrong email or password'; return; }
   boot();
+});
+const pwOv = document.getElementById('pwOverlay');
+document.getElementById('chpw').addEventListener('click', e => {
+  e.preventDefault();
+  document.getElementById('pw1').value = ''; document.getElementById('pw2').value = '';
+  document.getElementById('pwErr').textContent = '';
+  pwOv.style.display = 'flex';
+  document.getElementById('pw1').focus();
+});
+document.getElementById('pwCancel').addEventListener('click', () => pwOv.style.display = 'none');
+document.getElementById('pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p1 = document.getElementById('pw1').value, p2 = document.getElementById('pw2').value;
+  const err = document.getElementById('pwErr');
+  if (p1.length < 8) { err.textContent = 'Use at least 8 characters.'; return; }
+  if (p1 !== p2) { err.textContent = 'The two passwords do not match.'; return; }
+  err.textContent = 'Saving...';
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) { err.textContent = error.message || 'Could not update the password.'; return; }
+  pwOv.style.display = 'none';
+  alert('Password updated - use the new one next time you sign in.');
 });
 document.getElementById('signout').addEventListener('click', async e => {
   e.preventDefault(); await sb.auth.signOut(); location.reload();
