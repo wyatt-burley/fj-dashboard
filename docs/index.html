@@ -168,6 +168,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   <input class="who" id="whoami" placeholder="Your name (for notes)">
   <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
   <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
+  <button class="colbtn" id="refreshBtn" type="button" title="Pull the latest data from the database and recompute (fast - no waiting)">&#8635; Refresh</button>
   <button class="colbtn" id="csvBtn" type="button" title="Download the rows currently shown (after filters) as a spreadsheet">Export CSV</button>
 </div>
 <div class="quickrow" id="quickrow"><span class="qlbl">Quick views</span></div>
@@ -197,8 +198,10 @@ const RORDER={AT_RISK:0,BUFFERED:1,OK:2};
 const money=n=>'$'+Math.round(n).toLocaleString();
 const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let TAG_EDITS=window.__FJ_TAGS__||{};
-document.getElementById('sub').innerHTML=
-  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}`;
+const DIRTY=new Set(); // asins with a local edit not yet confirmed saved - never clobbered by a refresh
+function renderSub(){document.getElementById('sub').innerHTML=
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}`;}
+renderSub();
 
 /* KPI cards + charts recompute for the active scope; renderStats() is defined
    after the chart helpers and called from there. */
@@ -505,6 +508,58 @@ document.getElementById('csvBtn').onclick=()=>{
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 };
 
+/* ---- instant refresh: re-pull latest data from the database and recompute ---- */
+const refreshBtn=document.getElementById('refreshBtn');
+let _refreshing=false;
+async function doRefresh(){
+  if(_refreshing||!window.sb)return;
+  _refreshing=true;
+  const orig=refreshBtn.innerHTML;
+  refreshBtn.innerHTML='&#8635; Refreshing...';refreshBtn.disabled=true;
+  // snapshot what's unsaved NOW - a save landing mid-refresh must not let the
+  // re-seed wipe an edit the user still has on screen
+  const wasDirty=new Set(DIRTY);
+  // capture any in-progress note text (typed but not yet auto-saved) so a
+  // re-render can't drop it
+  document.querySelectorAll('#tb .noteinput').forEach(t=>{
+    const a=t.dataset.asin;
+    if(wasDirty.has('n:'+a)){const cur=NOTES[a]||{};NOTES[a]={note:t.value,by:cur.by,at:cur.at};}
+  });
+  try{
+    const [snap,ov,nts]=await Promise.all([
+      window.sb.from('dashboard_snapshot').select('data,updated_at').eq('id',1).single(),
+      window.sb.from('overrides').select('*'),
+      window.sb.from('notes').select('*')]);
+    if(snap.error||!snap.data)throw new Error('snapshot');
+    const nd=snap.data.data;
+    // replace rows + summary + months in place (keep const bindings valid)
+    R.length=0;(nd.rows||[]).forEach(r=>R.push(r));
+    Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,nd.summary||{});
+    MONTHS.length=0;(nd.months||[]).forEach(m=>MONTHS.push(m));
+    if(nd.aged)DATA.aged=nd.aged;if(nd.ltsf!=null)DATA.ltsf=nd.ltsf;if(nd.inboundStages)DATA.inboundStages=nd.inboundStages;
+    // re-seed team edits from server (source of truth), but NEVER clobber a
+    // local edit that hasn't confirmed its save yet (asin in DIRTY)
+    Object.keys(TAG_EDITS).forEach(k=>{if(!wasDirty.has('o:'+k))delete TAG_EDITS[k];});
+    Object.keys(COST_EDITS).forEach(k=>{if(!wasDirty.has('o:'+k))delete COST_EDITS[k];});
+    Object.keys(NOTES).forEach(k=>{if(!wasDirty.has('n:'+k))delete NOTES[k];});
+    (ov.data||[]).forEach(o=>{if(wasDirty.has('o:'+o.asin))return;
+      if(o.tags!=null&&o.tags!=='')TAG_EDITS[o.asin]=o.tags;
+      if(o.cost!=null)COST_EDITS[o.asin]=Number(o.cost);});
+    (nts.data||[]).forEach(n=>{if(!wasDirty.has('n:'+n.asin))NOTES[n.asin]={note:n.note,by:n.by,at:n.at};});
+    // recompute derived: GM from cost edits, then restock
+    for(const r of R){const c=COST_EDITS[r.asin];if(c!=null&&r.u30){const asp=r.sales/r.u30;r._gm=asp?Math.round((asp-c)/asp*1000)/1000:null;}else{r._gm=undefined;}}
+    window.__FJ_UPDATED__=snap.data.updated_at;
+    computeRestock();
+    renderSub();renderStats();renderTierChips();renderQuickBtns();renderTagChips();render();
+    refreshBtn.innerHTML='&#10003; Up to date';
+    setTimeout(()=>{refreshBtn.innerHTML=orig;refreshBtn.disabled=false;_refreshing=false;},1600);
+  }catch(e){
+    refreshBtn.innerHTML='Refresh failed - retry';
+    setTimeout(()=>{refreshBtn.innerHTML=orig;refreshBtn.disabled=false;_refreshing=false;},2200);
+  }
+}
+refreshBtn.onclick=doRefresh;
+
 /* ---- sticky left columns ---- */
 const STICKY=['img','tier','asin','name'];
 function stickify(){
@@ -572,7 +627,7 @@ function saveNote(asin,val,statEl){const who=getWho();
   if(statEl){statEl.textContent='Saving...';statEl.className='notestat saving';}
   window.sb.from('notes').upsert({asin:asin,note:val,by:who,at:new Date().toISOString()})
     .then(({error})=>{if(error)throw error;
-      NOTES[asin]={note:val,by:who,at:new Date().toISOString()};
+      NOTES[asin]={note:val,by:who,at:new Date().toISOString()};DIRTY.delete('n:'+asin);
       if(statEl){statEl.textContent=val?'Saved':'Cleared';statEl.className='notestat saved';}})
     .catch(()=>{if(statEl){statEl.textContent='Save failed, retry';statEl.className='notestat failed';}});}
 (function initWho(){const el=whoEl();if(el&&window.__FJ_USER__){el.value=(window.__FJ_USER__.split('@')[0]||'').replace(/^./,c=>c.toUpperCase());}})();
@@ -580,7 +635,7 @@ function saveOverride(asin){
   const patch={asin:asin,updated_by:getWho(),updated_at:new Date().toISOString()};
   if(TAG_EDITS[asin]!=null)patch.tags=TAG_EDITS[asin];
   if(COST_EDITS[asin]!=null)patch.cost=COST_EDITS[asin];
-  window.sb.from('overrides').upsert(patch).then(({error})=>{if(error)console.warn('override save failed',error);});
+  window.sb.from('overrides').upsert(patch).then(({error})=>{if(error)console.warn('override save failed',error);else DIRTY.delete('o:'+asin);});
 }
 
 /* ---- cost edits (in-page until database deploy) ---- */
@@ -700,7 +755,7 @@ document.getElementById('legendBtn').onclick=()=>{
 document.getElementById('tb').addEventListener('input',e=>{
   const t=e.target;
   if(t.classList.contains('tagin')){
-    TAG_EDITS[t.dataset.asin]=t.value.trim();
+    TAG_EDITS[t.dataset.asin]=t.value.trim();DIRTY.add('o:'+t.dataset.asin);
     t.classList.add('edited');
     clearTimeout(window._tagTimer);window._tagTimer=setTimeout(renderTagChips,600);
     clearTimeout(window._tagSave);window._tagSave=setTimeout(()=>saveOverride(t.dataset.asin),900);
@@ -708,7 +763,7 @@ document.getElementById('tb').addEventListener('input',e=>{
   if(t.classList.contains('costin')){
     const v=parseFloat(t.value);
     const r=R.find(x=>x.asin===t.dataset.asin);
-    if(r&&!isNaN(v)&&v>0){COST_EDITS[r.asin]=v;
+    if(r&&!isNaN(v)&&v>0){COST_EDITS[r.asin]=v;DIRTY.add('o:'+r.asin);
       const asp=r.u30?r.sales/r.u30:null;
       r._gm=asp?Math.round((asp-v)/asp*1000)/1000:null;
       t.classList.add('edited');
@@ -719,6 +774,7 @@ document.getElementById('tb').addEventListener('input',e=>{
   }
   if(t.classList.contains('noteinput')){
     const asin=t.dataset.asin,stat=t.parentNode.querySelector('.notestat');
+    DIRTY.add('n:'+asin);
     clearTimeout(NOTE_TIMERS[asin]);
     if(stat){stat.textContent='Typing...';stat.className='notestat';}
     NOTE_TIMERS[asin]=setTimeout(()=>saveNote(asin,t.value,stat),900);
