@@ -63,6 +63,18 @@ def st_units(raw):
         rev[a] = rev.get(a, 0) + (s.get('orderedProductSales', {}) or {}).get('amount', 0)
     return units, rev
 
+def st_parents(raw):
+    """Sales&Traffic JSON -> {childAsin: parentAsin} (both fields are in every row)."""
+    m = {}
+    try:
+        for e in json.loads(raw).get('salesAndTrafficByAsin', []):
+            c, p = e.get('childAsin'), e.get('parentAsin')
+            if c and p:
+                m[c] = p
+    except Exception:
+        pass
+    return m
+
 # ---------------------------------------------------------------- monthly mode
 def run_monthly():
     today = datetime.date.today()
@@ -74,6 +86,7 @@ def run_monthly():
         months.append((yy, mm))
     months.reverse()
     monthly, keys = {}, []
+    parents = state_get('parents') or {}
     for yy, mm in months:
         start = datetime.date(yy, mm, 1)
         end = datetime.date(yy, mm, calendar.monthrange(yy, mm)[1])
@@ -88,6 +101,7 @@ def run_monthly():
             u, _ = st_units(raw)
             for a, n in u.items():
                 monthly.setdefault(a, {})[key] = monthly.setdefault(a, {}).get(key, 0) + n
+            parents.update(st_parents(raw))
             keys.append(key)
             print(key, 'done', flush=True)
         else:
@@ -95,6 +109,8 @@ def run_monthly():
         time.sleep(50)
     units365 = {a: sum(mm.values()) for a, mm in monthly.items()}
     state_put('monthly', {'monthly': monthly, 'monthKeys': keys, 'units365': units365})
+    state_put('parents', parents)
+    print('parents map:', len(parents), flush=True)
     print('monthly state saved:', len(monthly), 'ASINs,', len(keys), 'months')
 
 # ------------------------------------------------------------------- fast mode
@@ -177,18 +193,27 @@ def run_fast():
     print(' ', len(fbm_by_sku), 'FBM listings', flush=True)
 
     print('sales & traffic 1d/7d/30d...', flush=True)
+    child_parent = {}  # child ASIN -> parent ASIN, harvested from the S&T reports
     raw = spapi.fetch_report(rid_1d) if rid_1d else None
     day_units = st_units(raw)[0] if raw else {}
+    if raw: child_parent.update(st_parents(raw))
     raw = spapi.fetch_report(rid_30) if rid_30 else None
+    if raw: child_parent.update(st_parents(raw))
     ac30u, ac30r = st_units(raw) if raw else ({}, {})
     raw = spapi.fetch_report(rid_7) if rid_7 else None
+    if raw: child_parent.update(st_parents(raw))
     ac7u = st_units(raw)[0] if raw else {}
-    print(f'  1d:{len(day_units)} 30d:{len(ac30u)} 7d:{len(ac7u)} ASINs', flush=True)
+    print(f'  1d:{len(day_units)} 30d:{len(ac30u)} 7d:{len(ac7u)} ASINs | parents this run:{len(child_parent)}', flush=True)
 
     print('loading state from Supabase...', flush=True)
     meta = state_get('sellery_meta') or {}
     mon = state_get('monthly') or {}
     images = state_get('images') or {}
+    # persistent child->parent map: accumulates across runs (monthly job adds more)
+    parents = state_get('parents') or {}
+    parents.update(child_parent)
+    if child_parent:
+        state_put('parents', parents)
     monthly, months, units365 = mon.get('monthly', {}), mon.get('monthKeys', []), mon.get('units365', {})
 
     # -- assemble ASIN rows (same logic as local build_rows_v2)
@@ -262,7 +287,7 @@ def run_fast():
         is_winter = bool(WINTER.search(r['name'] or '')) or any(str(k or '').upper().startswith('W') for k in r['cats']) \
                     or any(WINTER.search(k) for k in r['kw'] if k)
         trend = [monthly.get(a, {}).get(m, 0) for m in months]
-        rows.append({'asin': a, 'name': (r['name'] or '')[:160], 'img': images.get(a),
+        rows.append({'asin': a, 'parent': parents.get(a, ''), 'name': (r['name'] or '')[:160], 'img': images.get(a),
             'sales': round(r['sales'],2), 'u1': u1, 'u7': r['u7'], 'u30': r['u30'], 'u365': u365,
             'daily': round(daily,1), 'inv': r['inv'], 'fbaDays': fba_days, 'fbm': r['fbm'],
             'inbound': r['inbound'], 'combDays': comb_days, 'tier': tier, 'risk': risk,
