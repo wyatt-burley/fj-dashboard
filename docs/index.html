@@ -199,8 +199,9 @@ const money=n=>'$'+Math.round(n).toLocaleString();
 const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let TAG_EDITS=window.__FJ_TAGS__||{};
 const DIRTY=new Set(); // asins with a local edit not yet confirmed saved - never clobbered by a refresh
+let lastChecked=new Date(); // when THIS browser last loaded/refreshed data from the DB
 function renderSub(){document.getElementById('sub').innerHTML=
-  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}`;}
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
 renderSub();
 
 /* KPI cards + charts recompute for the active scope; renderStats() is defined
@@ -549,6 +550,7 @@ async function doRefresh(){
     // recompute derived: GM from cost edits, then restock
     for(const r of R){const c=COST_EDITS[r.asin];if(c!=null&&r.u30){const asp=r.sales/r.u30;r._gm=asp?Math.round((asp-c)/asp*1000)/1000:null;}else{r._gm=undefined;}}
     window.__FJ_UPDATED__=snap.data.updated_at;
+    lastChecked=new Date();
     computeRestock();
     renderSub();renderStats();renderTierChips();renderQuickBtns();renderTagChips();render();
     refreshBtn.innerHTML='&#10003; Up to date';
