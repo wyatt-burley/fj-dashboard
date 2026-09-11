@@ -292,7 +292,7 @@ function renderStats(){
 
 /* ---- columns ---- */
 const COLS=[
-  ['img','Image',1],['tier','FBA Tier',1],['asin','ASIN',1],['name','Product',1],
+  ['img','Image',1],['tier','FBA Tier',1],['parent','Parent ASIN',1],['asin','ASIN',1],['name','Product',1],
   ['tags','Tags',1],['kw','Keyword',0],['category','Category',0],
   ['price','Price',1],['cost','Unit Cost',1],['gm','GM %',1],
   ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
@@ -493,11 +493,11 @@ renderViews();loadViews();
 /* ---- CSV export of the current (filtered) rows ---- */
 function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 document.getElementById('csvBtn').onclick=()=>{
-  const cols=['asin','name','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
+  const cols=['parent_asin','asin','name','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
   const lines=[cols.join(',')];
   filteredRows().forEach(r=>{
     const g=r._gm!=null?r._gm:r.gm;
-    lines.push([r.asin,csvEsc(r.name),csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
+    lines.push([r.parent||'',r.asin,csvEsc(r.name),csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
       r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
       g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
       r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r._restock||0,r.tier,r.risk,
@@ -563,7 +563,7 @@ async function doRefresh(){
 refreshBtn.onclick=doRefresh;
 
 /* ---- sticky left columns ---- */
-const STICKY=['img','tier','asin','name'];
+const STICKY=['img','tier','parent','asin','name'];
 function stickify(){
   const ths=[...document.querySelectorAll('#hrow th')];
   let left=0;const offs={};
@@ -578,7 +578,7 @@ function stickify(){
 }
 
 /* header tooltips */
-const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, CRITICAL < 7 days, LOW 7-14, OK 14+',asin:'Amazon child ASIN',name:'Product title',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Units by month, trailing 12 months',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x units/day - FBA on hand - inbound. Change the target under "How the flags work".'};
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, CRITICAL < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Units by month, trailing 12 months',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x units/day - FBA on hand - inbound. Change the target under "How the flags work".'};
 
 /* ---- restock quantity suggestion ---- */
 let TARGET_DAYS=45;
@@ -652,6 +652,7 @@ function cellHTML(k,r){
   switch(k){
     case 'img': return '<td class="imgc" data-c="img">'+(r.img?'<a href="https://www.amazon.com/dp/'+esc(r.asin)+'" target="_blank" rel="noopener"><img loading="lazy" src="'+esc(r.img)+'" alt=""></a>':'')+'</td>';
     case 'tier': return '<td data-c="tier"><span class="badge '+r.tier+'">'+r.tier+'</span></td>';
+    case 'parent': return '<td class="asin" data-c="parent">'+(r.parent?'<a href="https://www.amazon.com/dp/'+esc(r.parent)+'" target="_blank" rel="noopener" style="color:#345d9d;text-decoration:none">'+esc(r.parent)+'</a>':'<span class="muted">-</span>')+'</td>';
     case 'asin': return '<td class="asin" data-c="asin">'+esc(r.asin)+'</td>';
     case 'name': return '<td class="name" data-c="name">'+esc(r.name)+'</td>';
     case 'tags': return '<td data-c="tags"><input class="tagin'+(TAG_EDITS[r.asin]?' edited':'')+'" data-asin="'+esc(r.asin)+'" value="'+esc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||''))+'" placeholder="best, ..."></td>';
@@ -702,13 +703,13 @@ function filteredRows(){
   else if(curFilter!=='ALL')rows=rows.filter(r=>r.tier===curFilter);
   if(quick){const fn=QUICK.find(q=>q[0]===quick)[2];rows=rows.filter(fn);}
   if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
-  if(curSearch)rows=rows.filter(r=>(r.name+' '+r.asin+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase().includes(curSearch));
+  if(curSearch)rows=rows.filter(r=>(r.name+' '+r.asin+' '+(r.parent||'')+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase().includes(curSearch));
   if(CONDS.length)rows=rows.filter(r=>CONDS.every(c=>condTest(r,c)));
   rows.sort((a,b)=>{let x,y;
     if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
     else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
     else if(sortK==='tags'){x=effTags(a).join(',')||'￿';y=effTags(b).join(',')||'￿';return sortAsc?(x<y?-1:1):(x>y?-1:1)}
-    else if(sortK==='name'||sortK==='asin'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'').toLowerCase();y=(b[sortK]||'').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
+    else if(sortK==='name'||sortK==='asin'||sortK==='parent'||sortK==='kw'||sortK==='category'){x=(a[sortK]||'￿').toLowerCase();y=(b[sortK]||'￿').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
     else{const kk=sortK==='restock'?'_restock':sortK;x=a[kk]==null?1e9:a[kk];y=b[kk]==null?1e9:b[kk]}
     return sortAsc?x-y:y-x;});
   return rows;
@@ -716,7 +717,7 @@ function filteredRows(){
 function render(){
   const shown=COLS.filter(c=>visible[c[0]]);
   document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
-    `<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}</th>`).join('');
+    `<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','parent','asin','risk','trend','notes'].includes(k)?'':'r'}">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}</th>`).join('');
   let rows=filteredRows();
   const totalRows=rows.length,MAXR=500;
   const cnt=document.getElementById('count');
@@ -742,7 +743,7 @@ function render(){
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
   document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
     if(['img','trend','notes'].includes(k))return;
-    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=['tier','risk','fbaDays','combDays','inv','fbm','name','asin','tags','kw','category'].includes(k);}
+    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=['tier','risk','fbaDays','combDays','inv','fbm','name','asin','parent','tags','kw','category'].includes(k);}
     render();});
   renderTagChips();
 }
