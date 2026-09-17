@@ -12,8 +12,16 @@ MODE=monthly (weekly):
 Env: LWA_CLIENT_ID, LWA_CLIENT_SECRET, LWA_REFRESH_TOKEN,
      SUPABASE_URL, SUPABASE_SERVICE_KEY  (optional: MARKETPLACE_ID, SELLER_ID, MODE)
 """
-import calendar, datetime, json, os, re, statistics, time, urllib.request
+import calendar, collections, datetime, json, os, re, statistics, time, urllib.request
 import spapi
+
+def primary_sku(skus):
+    """Pick the display SKU for an ASIN: FBA channel preferred, then FBM/FJ, then any."""
+    def rank(s):
+        m = re.search(r'-(FBA|FJ|FBM)$', s or '', re.I)
+        t = m.group(1).upper() if m else ''
+        return {'FBA': 0, 'FJ': 1, 'FBM': 1}.get(t, 2)
+    return sorted(skus, key=rank)[0] if skus else ''
 
 SUPABASE_URL = os.environ['SUPABASE_URL'].rstrip('/')
 SVC = os.environ['SUPABASE_SERVICE_KEY']
@@ -209,6 +217,8 @@ def run_fast():
     meta = state_get('sellery_meta') or {}
     mon = state_get('monthly') or {}
     images = state_get('images') or {}
+    colors = state_get('colors') or {}
+    season_map = state_get('season') or {}
     # persistent child->parent map: accumulates across runs (monthly job adds more)
     parents = state_get('parents') or {}
     parents.update(child_parent)
@@ -232,7 +242,7 @@ def run_fast():
             'u7': 0, 'u30': 0, 'fba30': 0, 'sales': 0.0, 'price': None, 'aged': [0,0,0,0,0],
             'inbW': 0, 'inbS': 0, 'inbR': 0,
             'ais': 0.0, 'fbm': 0, 'costs': [], 'kw': set(), 'cats': set(), 'categories': set(),
-            'skus': set(), 'added': None})
+            'skus': set(), 'parentSkus': [], 'disc': False, 'added': None})
         r['name'] = r['name'] or inv['productName']
         r['inv'] += inv['fulfillable']
         r['inbW'] += inv['inboundWorking']; r['inbS'] += inv['inboundShipped']; r['inbR'] += inv['inboundReceiving']
@@ -254,6 +264,8 @@ def run_fast():
             if m.get('k'): r['kw'].add(m['k'])
             if m.get('t'): r['cats'].add(m['t'])
             if m.get('d'): r['added'] = min(r['added'] or m['d'], m['d'])
+            if m.get('ps'): r['parentSkus'].append(m['ps'])
+            if m.get('v') and re.search(r'\bDISC\b', str(m['v']), re.I): r['disc'] = True
             for part in str(m.get('g') or '').split(','):
                 part = part.strip()
                 if part: r['categories'].add(part)
@@ -295,35 +307,43 @@ def run_fast():
             'kw': ' '.join(sorted(k for k in r['kw'] if k))[:120],
             'category': ', '.join(sorted(r['categories'], key=str.lower))[:120],
             'tags': ('winter' if is_winter else ''), 'skuList': ' '.join(sorted(r['skus']))[:400],
+            'sku': primary_sku(r['skus']),
+            'parentSku': (collections.Counter(r['parentSkus']).most_common(1)[0][0] if r['parentSkus'] else ''),
+            'season': season_map.get(a, ''), 'disc': r['disc'], 'color': colors.get(a, ''),
             'added': r['added'], 'winter': is_winter, 'trend': trend,
             'top': r['sales'] >= 1000, 'fbmOnly': fbm_only,
             'aged': r['aged'], 'ais': round(r['ais'], 1),
             'inbW': r['inbW'], 'inbS': r['inbS'], 'inbR': r['inbR']})
     rows.sort(key=lambda r: (-r['sales'], -r['inv']))
 
-    # -- image refresh for new ASINs (catalog batch of 20; '' marks known-missing
-    #    so unfetchable ASINs aren't re-requested every run)
-    missing = [r['asin'] for r in rows if not r['img'] and r['asin'] not in images]
-    if missing:
-        print('fetching images for', len(missing), 'new ASINs...', flush=True)
-        for i in range(0, len(missing), 20):
-            batch = missing[i:i+20]
+    # -- catalog backfill: images + color for ASINs missing either (batch of 20;
+    #    '' marks known-missing so unfetchable ASINs aren't re-requested every run)
+    need = [r['asin'] for r in rows if r['asin'] not in images or r['asin'] not in colors]
+    if need:
+        print('catalog backfill (image+color) for', len(need), 'ASINs...', flush=True)
+        for i in range(0, len(need), 20):
+            batch = need[i:i+20]
             try:
                 d = spapi.get('/catalog/2022-04-01/items', {
                     'identifiers': ','.join(batch), 'identifiersType': 'ASIN',
-                    'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': 'images'})
+                    'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': 'images,summaries'})
                 for it in d.get('items', []):
+                    a = it['asin']
                     imgs = (it.get('images') or [{}])[0].get('images') or []
                     small = min(imgs, key=lambda im: im.get('width', 9999), default=None)
-                    if small: images[it['asin']] = small['link']
+                    if small: images[a] = small['link']
+                    col = (it.get('summaries') or [{}])[0].get('color') or ''
+                    if col: colors[a] = col
                 for a in batch:
-                    images.setdefault(a, '')
+                    images.setdefault(a, ''); colors.setdefault(a, '')
             except Exception as e:
-                print('  image batch failed:', str(e)[:120], flush=True)
+                print('  catalog batch failed:', str(e)[:120], flush=True)
             time.sleep(1.2)
         state_put('images', images)
-        for r in rows:
-            r['img'] = r['img'] or images.get(r['asin']) or None
+        state_put('colors', colors)
+    for r in rows:
+        r['img'] = r['img'] or images.get(r['asin']) or None
+        r['color'] = colors.get(r['asin']) or ''
 
     # KPI cards keep their "top sellers ($1K+/30d)" meaning; the scope toggle in
     # the app recomputes chip counts client-side for the all-ASIN view.
