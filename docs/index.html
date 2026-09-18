@@ -296,7 +296,7 @@ function renderStats(){
   document.getElementById('cards').innerHTML=cards.map(c=>
     `<div class="card ${c[2]}"><div class="lbl">${c[0]}</div><div class="val">${typeof c[1]==='number'?c[1].toLocaleString():c[1]}</div><div class="vsub">${c[3]}</div></div>`).join('');
   const tiers=[['OUT','#912018'],['CRITICAL','#d4541a'],['LOW','#cc9a00'],['OK','#1a7a44']];
-  bars('tierChart',tiers.map(([t])=>[t,Math.round(B.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),B.filter(r=>r.tier===t).length.toLocaleString()+' ASINs']),
+  bars('tierChart',tiers.map(([t])=>[tierLabel(t),Math.round(B.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),B.filter(r=>r.tier===t).length.toLocaleString()+' ASINs']),
     tiers.map(t=>t[1]),v=>'$'+(v>=1000?Math.round(v/1000)+'K':v),'$');
   const hasAged=B.length&&B[0].aged!==undefined;
   const A=hasAged?[0,1,2,3,4].map(i=>B.reduce((a,r)=>a+((r.aged||[])[i]||0),0)):DATA.aged;
@@ -971,7 +971,7 @@ document.getElementById('tb').addEventListener('focusout',e=>{
 });
 document.getElementById('foot').innerHTML=
   `<b>Sales windows:</b> 1-day = ${esc(S.dayDate)} (Amazon sales reports lag ~48h); 7/30-day and 12-Mo = units ordered across ALL channels (FBA + FBM). `+
-  `<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), CRITICAL (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
+  `<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
   `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
   `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs are the Sellery Cost field (includes the bundle/adder logic); prices, images & color live from Amazon. `+
   `<b>Season</b> comes from the Xnurta product line (Winter/Summer/Bridal/Other) and drives the seasonal restock factor. <b>DISC</b> ASINs (vendor discontinued) are shown but never get a reorder suggestion. `+
