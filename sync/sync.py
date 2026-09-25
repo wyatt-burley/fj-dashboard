@@ -84,23 +84,32 @@ def st_parents(raw):
     return m
 
 # ---------------------------------------------------------------- monthly mode
+MONTHLY_START = (2025, 1)   # history floor for YoY seasonality (Jan 2025 onward)
+
 def run_monthly():
     today = datetime.date.today()
-    months = []
-    y, m = today.year, today.month
-    for i in range(12):
-        mm, yy = m - i, y
-        while mm < 1: mm += 12; yy -= 1
-        months.append((yy, mm))
-    months.reverse()
-    monthly, keys = {}, []
+    # full ordered month list from MONTHLY_START through the current month
+    months, yy, mm = [], MONTHLY_START[0], MONTHLY_START[1]
+    while (yy, mm) <= (today.year, today.month):
+        months.append((yy, mm)); mm += 1
+        if mm > 12: mm = 1; yy += 1
+    # incremental: reuse prior months, only fetch ones we don't have (+ always the current,
+    # still-growing month). Closed historical months never change, so we skip their API calls.
+    prev = state_get('monthly') or {}
+    monthly = prev.get('monthly', {})       # {asin: {ym: units}}
+    have = set(prev.get('monthKeys', []))
     parents = state_get('parents') or {}
+    cur_key = f'{today.year}-{today.month:02d}'
+    got = set()
     for yy, mm in months:
+        key = f'{yy}-{mm:02d}'
         start = datetime.date(yy, mm, 1)
         end = datetime.date(yy, mm, calendar.monthrange(yy, mm)[1])
         if end >= today: end = today - datetime.timedelta(days=2)
-        if end < start: continue
-        key = f'{yy}-{mm:02d}'
+        if end < start:
+            continue                        # month hasn't started yet
+        if key in have and key != cur_key:
+            got.add(key); continue          # closed month already stored - skip the report
         rid = spapi.create_report('GET_SALES_AND_TRAFFIC_REPORT',
             {'dateGranularity': 'MONTH', 'asinGranularity': 'CHILD'},
             start.isoformat() + 'T00:00:00Z', end.isoformat() + 'T23:59:59Z')
@@ -108,18 +117,21 @@ def run_monthly():
         if raw:
             u, _ = st_units(raw)
             for a, n in u.items():
-                monthly.setdefault(a, {})[key] = monthly.setdefault(a, {}).get(key, 0) + n
+                monthly.setdefault(a, {})[key] = n   # authoritative overwrite for this month
             parents.update(st_parents(raw))
-            keys.append(key)
-            print(key, 'done', flush=True)
+            got.add(key); print(key, 'done', flush=True)
         else:
+            if key in have: got.add(key)             # keep prior data if a re-fetch failed
             print(key, 'FAILED', flush=True)
         time.sleep(50)
-    units365 = {a: sum(mm.values()) for a, mm in monthly.items()}
+    keys = [f'{y}-{m:02d}' for y, m in months if f'{y}-{m:02d}' in got]
+    last12 = set(keys[-12:])                          # 12-Mo column stays trailing-12
+    units365 = {a: sum(n for k, n in mm.items() if k in last12) for a, mm in monthly.items()}
     state_put('monthly', {'monthly': monthly, 'monthKeys': keys, 'units365': units365})
     state_put('parents', parents)
     print('parents map:', len(parents), flush=True)
-    print('monthly state saved:', len(monthly), 'ASINs,', len(keys), 'months')
+    print('monthly state saved:', len(monthly), 'ASINs,', len(keys), 'months',
+          (keys[0] + '->' + keys[-1]) if keys else '-')
 
 # ------------------------------------------------------------------- fast mode
 def run_fast():
