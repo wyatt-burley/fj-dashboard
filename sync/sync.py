@@ -23,6 +23,29 @@ def primary_sku(skus):
         return {'FBA': 0, 'FJ': 1, 'FBM': 1}.get(t, 2)
     return sorted(skus, key=rank)[0] if skus else ''
 
+CATALOG_VER = 2   # bump to force a one-time re-pull of every image + color from the Amazon catalog
+
+def main_image(image_sets):
+    """Smallest MAIN image link from a Catalog Items `images` block (falls back to the smallest of
+    any variant only when the item has no MAIN image). Previously the smallest image of ANY variant
+    was taken, which is often a swatch or a secondary photo."""
+    imgs = (image_sets or [{}])[0].get('images') or []
+    main = [im for im in imgs if (im.get('variant') or '').upper() == 'MAIN']
+    pick = min(main or imgs, key=lambda im: im.get('width') or 9999, default=None)
+    return pick['link'] if pick else ''
+
+def catalog_color(item):
+    """Color for a catalog item: the summary field, else the listing's color attribute (the
+    variation value the seller entered), which is filled in on many items whose summary is blank."""
+    col = ((item.get('summaries') or [{}])[0].get('color') or '').strip()
+    if col: return col
+    attrs = item.get('attributes') or {}
+    for key in ('color', 'color_name'):
+        for v in attrs.get(key) or []:
+            val = (v.get('value') if isinstance(v, dict) else v) or ''
+            if isinstance(val, str) and val.strip(): return val.strip()
+    return ''
+
 SUPABASE_URL = os.environ['SUPABASE_URL'].rstrip('/')
 SVC = os.environ['SUPABASE_SERVICE_KEY']
 MODE = os.environ.get('MODE', 'fast')
@@ -202,14 +225,17 @@ def run_fast():
     print(' ', len(planning), 'rows', flush=True)
 
     print('FBM listings report...', flush=True)
-    fbm_by_sku = {}
+    fbm_by_sku, fbm_asin, fbm_name = {}, {}, {}
     raw = spapi.fetch_report(rid_fbm) if rid_fbm else None
     if raw:
         for g in tsv_rows(raw, 'cp1252'):
             sku = g('seller-sku')
             if not sku or g('fulfillment-channel').startswith('AMAZON'): continue
             q = g('quantity')
-            fbm_by_sku[sku] = int(float(q)) if q.strip() else 0
+            try: fbm_by_sku[sku] = int(float(q)) if q.strip() else 0
+            except ValueError: fbm_by_sku[sku] = 0
+            if g('asin1').strip(): fbm_asin[sku] = g('asin1').strip()
+            fbm_name[sku] = g('item-name')
     print(' ', len(fbm_by_sku), 'FBM listings', flush=True)
 
     print('sales & traffic 1d/7d/30d...', flush=True)
@@ -230,6 +256,7 @@ def run_fast():
     mon = state_get('monthly') or {}
     images = state_get('images') or {}
     colors = state_get('colors') or {}
+    force_catalog = (state_get('catalog_ver') or {}).get('v') != CATALOG_VER
     season_map = state_get('season') or {}
     # persistent child->parent map: accumulates across runs (monthly job adds more)
     parents = state_get('parents') or {}
@@ -247,30 +274,19 @@ def run_fast():
 
     WINTER = re.compile(r'beanie|winter|knit|scarf|glove|mitten|skull|pom|fleece|ear ?warm|snow|slouch', re.I)
     by_asin = {}
-    for sku, inv in skus.items():
-        a = inv['asin'] or meta.get(sku, {}).get('a')
-        if not a: continue
-        r = by_asin.setdefault(a, {'asin': a, 'name': inv['productName'], 'inv': 0, 'inbound': 0,
+    def row_for(a, name):
+        r = by_asin.setdefault(a, {'asin': a, 'name': name, 'inv': 0, 'inbound': 0,
             'u7': 0, 'u30': 0, 'fba30': 0, 'sales': 0.0, 'price': None, 'aged': [0,0,0,0,0],
             'inbW': 0, 'inbS': 0, 'inbR': 0,
             'ais': 0.0, 'fbm': 0, 'costs': [], 'kw': set(), 'cats': set(), 'categories': set(),
-            'skus': set(), 'parentSkus': [], 'disc': False, 'added': None})
-        r['name'] = r['name'] or inv['productName']
-        r['inv'] += inv['fulfillable']
-        r['inbW'] += inv['inboundWorking']; r['inbS'] += inv['inboundShipped']; r['inbR'] += inv['inboundReceiving']
-        r['inbound'] += inv['inboundWorking'] + inv['inboundShipped'] + inv['inboundReceiving']
+            'skus': set(), 'fbaSkus': {}, 'fbmSkus': {}, 'parentSkus': [], 'disc': False, 'added': None})
+        r['name'] = r['name'] or name
+        return r
+    def apply_meta(r, sku):
+        """Sellery fields for one SKU, applied once per (row, SKU)."""
+        if sku in r['skus']: return
         r['skus'].add(sku)
-        p = planning.get(sku)
-        if p:
-            r['fba30'] += p['units30d']
-            r['u30'] += p['units30d']; r['u7'] += p['units7d']
-            if p['price']: r['price'] = max(r['price'] or 0, p['price'])
-            r['sales'] += p['units30d'] * (p['price'] or 0)
-            for i, k in enumerate(['d0_90','d91_180','d181_270','d271_365','d365plus']):
-                r['aged'][i] += p['aged'][k]
-            r['ais'] += p['ais']
         if sku in cost_by_sku: r['costs'].append(cost_by_sku[sku])
-        r['fbm'] += fbm_by_sku.get(sku, 0) or 0
         m = meta.get(sku)
         if m:
             if m.get('k'): r['kw'].add(m['k'])
@@ -281,6 +297,41 @@ def run_fast():
             for part in str(m.get('g') or '').split(','):
                 part = part.strip()
                 if part: r['categories'].add(part)
+    for sku, inv in skus.items():
+        a = inv['asin'] or meta.get(sku, {}).get('a')
+        if not a: continue
+        r = row_for(a, inv['productName'])
+        r['inv'] += inv['fulfillable']
+        r['inbW'] += inv['inboundWorking']; r['inbS'] += inv['inboundShipped']; r['inbR'] += inv['inboundReceiving']
+        r['inbound'] += inv['inboundWorking'] + inv['inboundShipped'] + inv['inboundReceiving']
+        apply_meta(r, sku)
+        r['fbaSkus'][sku] = inv['fulfillable'] + inv['inboundWorking'] + inv['inboundShipped'] + inv['inboundReceiving']
+        p = planning.get(sku)
+        if p:
+            r['fba30'] += p['units30d']
+            r['u30'] += p['units30d']; r['u7'] += p['units7d']
+            if p['price']: r['price'] = max(r['price'] or 0, p['price'])
+            r['sales'] += p['units30d'] * (p['price'] or 0)
+            for i, k in enumerate(['d0_90','d91_180','d181_270','d271_365','d365plus']):
+                r['aged'][i] += p['aged'][k]
+            r['ais'] += p['ais']
+
+    # FBM listings join by ASIN (the listings report's asin1), so an FBM SKU that differs from the
+    # FBA SKU still lands on its ASIN's row. Before, FBM quantity was looked up by the FBA SKU and
+    # an FBM-only SKU was dropped. Each FBM SKU is counted exactly once.
+    fbm_unmatched = 0
+    for sku, q in fbm_by_sku.items():
+        a = fbm_asin.get(sku) or (skus.get(sku) or {}).get('asin') or meta.get(sku, {}).get('a')
+        if not a:
+            fbm_unmatched += 1
+            continue
+        r = row_for(a, fbm_name.get(sku, ''))
+        r['fbm'] += q or 0
+        r['fbmSkus'][sku] = q or 0
+        apply_meta(r, sku)
+    print(f'  FBM join: {len(fbm_by_sku) - fbm_unmatched} listings matched to an ASIN, '
+          f'{sum(1 for s in fbm_by_sku if s not in skus)} have a SKU that is not an FBA SKU, '
+          f'{fbm_unmatched} with no ASIN', flush=True)
 
     rows = []
     for a, r in by_asin.items():
@@ -301,6 +352,8 @@ def run_fast():
         # but FBM stock covers it -> not an FBA stockout, don't flag it.
         fbm_only = (r['inv'] == 0 and r['inbound'] == 0 and r['fbm'] > 0
                     and r['fba30'] == 0 and sum(r['aged']) == 0)
+        # an ASIN with no FBA SKU at all is FBM-only whatever its stock: never an FBA stockout
+        if not r['fbaSkus'] and r['fbmSkus']: fbm_only = True
         tier = 'OUT' if r['inv'] == 0 else 'CRITICAL' if fba_days < 7 else 'LOW' if fba_days < 14 else 'OK'
         if fbm_only:
             tier, fba_days = 'OK', None
@@ -319,7 +372,11 @@ def run_fast():
             'kw': ' '.join(sorted(k for k in r['kw'] if k))[:120],
             'category': ', '.join(sorted(r['categories'], key=str.lower))[:120],
             'tags': ('winter' if is_winter else ''), 'skuList': ' '.join(sorted(r['skus']))[:400],
-            'sku': primary_sku(r['skus']),
+            'sku': primary_sku(r['fbaSkus'] or r['skus']),
+            # one SKU per channel for the SKU column: the one holding the most stock, ties by name
+            'skuFba': (sorted(r['fbaSkus'], key=lambda k: (-r['fbaSkus'][k], k))[0] if r['fbaSkus'] else ''),
+            'skuFbm': (sorted((k for k in r['fbmSkus'] if k not in r['fbaSkus'] or r['fbmSkus'][k] > 0),
+                              key=lambda k: (-r['fbmSkus'][k], k)) or [''])[0],
             'parentSku': (collections.Counter(r['parentSkus']).most_common(1)[0][0] if r['parentSkus'] else ''),
             'season': season_map.get(a, ''), 'disc': r['disc'], 'color': colors.get(a, ''),
             'added': r['added'], 'winter': is_winter, 'trend': trend,
@@ -327,34 +384,55 @@ def run_fast():
             'aged': r['aged'], 'ais': round(r['ais'], 1),
             'inbW': r['inbW'], 'inbS': r['inbS'], 'inbR': r['inbR']})
     rows.sort(key=lambda r: (-r['sales'], -r['inv']))
+    print(f"  rows: {len(rows)} | FBM-only (exempt from FBA tiers): {sum(1 for r in rows if r['fbmOnly'])} | "
+          f"with FBM stock: {sum(1 for r in rows if r['fbm'] > 0)}", flush=True)
 
     # -- catalog backfill: images + color for ASINs missing either (batch of 20;
     #    '' marks known-missing so unfetchable ASINs aren't re-requested every run)
-    need = [r['asin'] for r in rows if r['asin'] not in images or r['asin'] not in colors]
+    #    A CATALOG_VER bump re-pulls every ASIN once (old values stay in place until replaced, and
+    #    the version is only recorded when every batch succeeded, so a throttled run just retries).
+    need = [r['asin'] for r in rows if force_catalog or r['asin'] not in images or r['asin'] not in colors]
     if need:
-        print('catalog backfill (image+color) for', len(need), 'ASINs...', flush=True)
+        print('catalog backfill (image+color) for', len(need), 'ASINs' + (' [full re-pull]' if force_catalog else '') + '...', flush=True)
+        failed, with_attrs = 0, True
+        def catalog(batch, included):
+            return spapi.get('/catalog/2022-04-01/items', {
+                'identifiers': ','.join(batch), 'identifiersType': 'ASIN',
+                'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': included})
         for i in range(0, len(need), 20):
             batch = need[i:i+20]
             try:
-                d = spapi.get('/catalog/2022-04-01/items', {
-                    'identifiers': ','.join(batch), 'identifiersType': 'ASIN',
-                    'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': 'images,summaries'})
+                try:
+                    d = catalog(batch, 'images,summaries,attributes' if with_attrs else 'images,summaries')
+                except Exception as e:
+                    if not with_attrs: raise
+                    # attributes not available to this app/role: carry on with summaries only
+                    print('  catalog with attributes failed, retrying without:', str(e)[:120], flush=True)
+                    d = catalog(batch, 'images,summaries')
+                    with_attrs = False
                 for it in d.get('items', []):
                     a = it['asin']
-                    imgs = (it.get('images') or [{}])[0].get('images') or []
-                    small = min(imgs, key=lambda im: im.get('width', 9999), default=None)
-                    if small: images[a] = small['link']
-                    col = (it.get('summaries') or [{}])[0].get('color') or ''
+                    link = main_image(it.get('images'))
+                    if link: images[a] = link
+                    col = catalog_color(it)
                     if col: colors[a] = col
                 for a in batch:
                     images.setdefault(a, ''); colors.setdefault(a, '')
             except Exception as e:
+                failed += 1
                 print('  catalog batch failed:', str(e)[:120], flush=True)
             time.sleep(1.2)
         state_put('images', images)
         state_put('colors', colors)
+        print(f'  catalog: {sum(1 for a in need if colors.get(a))}/{len(need)} with color, '
+              f'{sum(1 for a in need if images.get(a))}/{len(need)} with image, {failed} failed batches'
+              + ('' if with_attrs else ' (attributes unavailable)'), flush=True)
+        if force_catalog and not failed and with_attrs:
+            state_put('catalog_ver', {'v': CATALOG_VER})
+    elif force_catalog:
+        state_put('catalog_ver', {'v': CATALOG_VER})
     for r in rows:
-        r['img'] = r['img'] or images.get(r['asin']) or None
+        r['img'] = images.get(r['asin']) or r['img'] or None
         r['color'] = colors.get(r['asin']) or ''
 
     # KPI cards keep their "top sellers ($1K+/30d)" meaning; the scope toggle in
