@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Funky Junque FBA Inventory & Restock</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f4f6fa;color:#1b2333;font-size:14px}
+.wrap{max-width:1440px;margin:0 auto;padding:20px 18px 60px}
+h1{font-size:21px;margin:0;font-weight:700;letter-spacing:-.2px}
+.brandhead{display:flex;align-items:center;gap:13px;margin-bottom:6px}
+.brandtitle .eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#3a4046;margin-bottom:2px}
+.brandbar{height:3px;width:100%;border-radius:2px;background:linear-gradient(90deg,#141414 0%,#555 58%,#cfcfcf 100%);margin:0 0 16px;opacity:.9}
+.sub{color:#5b6678;font-size:12.5px;margin-bottom:16px;line-height:1.7}
+.sub b{color:#1b2333}
+.apibanner{display:flex;align-items:center;gap:10px;background:#e9f7ee;border:1px solid #bfe6cb;border-radius:10px;padding:9px 14px;font-size:12.5px;color:#1a5c33;margin-bottom:16px}
+.apibanner b{color:#124023}
+.apibanner .pulse{width:8px;height:8px;border-radius:50%;background:#0ca30c;flex:none;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.cards{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:14px}
+.card{background:#fff;border:1px solid #e6eaf1;border-radius:10px;padding:13px 14px;box-shadow:0 1px 2px rgba(20,30,60,.04)}
+.card .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#7a8499;font-weight:600}
+.card .val{font-size:22px;font-weight:700;margin-top:4px;line-height:1.1}
+.card .vsub{font-size:11px;color:#8b95a7;margin-top:3px}
+.card.risk .val{color:#b42318}
+.card.out .val{color:#912018}
+.panels{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+@media(max-width:980px){.panels{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}}
+.panel{background:#fff;border:1px solid #e6eaf1;border-radius:10px;padding:13px 14px;box-shadow:0 1px 2px rgba(20,30,60,.04)}
+.panel h2{font-size:13px;margin:0 0 2px;font-weight:700}
+.panel .psub{font-size:11.5px;color:#8b95a7;margin-bottom:8px}
+svg text{font-family:inherit}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.fbtn{border:1px solid #d6dce6;background:#fff;border-radius:20px;padding:5px 12px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263;display:flex;align-items:center;gap:6px}
+.fbtn .dot{width:8px;height:8px;border-radius:50%}
+.fbtn.active{background:#1b2333;color:#fff;border-color:#1b2333}
+.fbtn.active .cnt{color:#cdd5e2}
+.fbtn .cnt{color:#94a0b3;font-weight:700}
+.quickrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.quickrow .qlbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8b95a7;font-weight:700;margin-right:2px}
+.qbtn{border:1px dashed #b9c6da;background:#f7fafd;border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;color:#345d9d;display:flex;align-items:center;gap:6px}
+.qbtn.active{background:#345d9d;color:#fff;border-color:#345d9d;border-style:solid}
+.qbtn .cnt{opacity:.7;font-weight:700}
+input.search{flex:1;min-width:200px;border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:13px;outline:none}
+input.search:focus{border-color:#1b6fd4}
+input.who{border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:12.5px;outline:none;width:170px;flex:none}
+.colbtn{border:1px solid #d6dce6;background:#fff;border-radius:8px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263;flex:none}
+.colpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:10px 14px;display:none;columns:2;gap:18px;min-width:320px}
+.colpop label{display:block;font-size:12.5px;padding:3px 0;white-space:nowrap;cursor:pointer;break-inside:avoid}
+.colwrap{position:relative;flex:none}
+td.stick,th.stick{position:sticky;background:#fff;z-index:3}
+th.stick{z-index:6;background:#fafbfd}
+td.stick-last,th.stick-last{border-right:2px solid #c3ccda}
+.filtpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:14px 16px;display:none;min-width:520px}
+.filtpop .frow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.filtpop select,.filtpop input{border:1px solid #d6dce6;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit;background:#fff}
+.filtpop select.ffield{width:170px}.filtpop select.fop{width:120px}.filtpop input.fval{width:130px}
+.filtpop .fdel{border:none;background:none;color:#a7b0c0;cursor:pointer;font-size:15px;padding:2px 5px}
+.filtpop .fdel:hover{color:#a4161a}
+.filtpop .fand{font-size:11px;font-weight:700;color:#8b95a7;width:20px;text-align:center}
+.filtpop .fadd{border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12.5px;font-weight:600;padding:4px 0}
+.filtpop .fbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.filtpop .fcancel{border:1px solid #d6dce6;background:#fff;border-radius:7px;padding:7px 16px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263}
+.filtpop .fapply{border:none;background:#1b2333;color:#fff;border-radius:7px;padding:7px 18px;font-size:12.5px;cursor:pointer;font-weight:700}
+.filtpop .fhint{font-size:11px;color:#8b95a7;margin-bottom:10px}
+.colbtn .cnt2{background:#1b2333;color:#fff;border-radius:10px;padding:1px 7px;font-size:10.5px;margin-left:5px}
+.vchip .vx{margin-left:4px;color:#a7b0c0;font-weight:700}
+.vchip .vx:hover{color:#a4161a}
+.tablewrap{background:#fff;border:1px solid #e6eaf1;border-radius:10px;overflow:auto;max-height:74vh;overscroll-behavior:contain}
+table{border-collapse:separate;border-spacing:0;width:100%}
+th,td{text-align:left;padding:8px 9px;border-right:1px solid #e1e6ee;white-space:nowrap}
+th{border-bottom:1px solid #d5dbe6}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#7a8499;cursor:pointer;user-select:none;background:#fafbfd;position:sticky;top:0;z-index:5}
+th.r,td.r{text-align:right}
+td.name{color:#2c3445;font-size:12.5px;line-height:1.35}
+.nametrunc{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+td.selc,th.selc{width:30px;min-width:30px;text-align:center;padding:6px 4px}
+.rowsel,#selAll{cursor:pointer;width:15px;height:15px}
+.bulkbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#eaf1ff;border:1px solid #b9ccf0;border-radius:10px;padding:9px 12px;margin:8px 0}
+.bulkbar[hidden]{display:none}
+.bulkbar .bsel{font-weight:700;color:#1b2333;font-size:13px}
+.bulkbar .bbtn{position:relative;border:1px solid #c2cfe6;background:#fff;border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:600;color:#2b3a55;cursor:pointer}
+.bulkbar .bbtn:hover{background:#f4f8ff;border-color:#8fb0e6}
+.bulkbar .bclear{border:none;background:none;color:#5b6678;text-decoration:underline;cursor:pointer;font-size:12px}
+.bulkbar .bstat{font-size:12px;color:#1a7a44;font-weight:600}
+.bpop{position:absolute;left:0;top:34px;z-index:80;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:10px;min-width:190px;max-height:260px;overflow:auto}
+.bpop .bph{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#8b95a7;font-weight:700;margin:0 2px 6px}
+.bpop .bchip{display:inline-block;margin:2px;border:1px solid #cfd8e8;background:#f5f8fd;border-radius:16px;padding:3px 10px;font-size:12px;cursor:pointer;color:#2b3a55}
+.bpop .bchip:hover{background:#e6f0ff;border-color:#8fb0e6}
+.bpop .bnew{display:flex;gap:5px;margin-top:8px}
+.bpop .bnew input{flex:1;border:1px solid #d6dce6;border-radius:7px;padding:5px 7px;font-size:12.5px}
+.bpop .bnew button{border:none;background:#1b2333;color:#fff;border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer}
+.bpop .bempty{font-size:12px;color:#8b95a7;padding:4px 2px}
+td.asin{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#5b6678}
+tr.mainrow.alt td,tr.mainrow.alt td.stick{background:#f2f4f8}
+tr.mainrow.selrow td,tr.mainrow.selrow td.stick{background:#d3e2fb}
+tr.mainrow:hover td,tr.mainrow:hover td.stick{background:#c9dbf7}
+th .rz{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize}
+th .rz:hover,th .rz.on{background:#1b6fd4;opacity:.5}
+th.dragging{opacity:.4}
+th.dropL{box-shadow:inset 3px 0 0 #1b6fd4}
+th.dropR{box-shadow:inset -3px 0 0 #1b6fd4}
+.colpop .colreset{display:block;margin-top:8px;border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;break-inside:avoid}
+.colpop .colhint{font-size:11px;color:#8b95a7;margin-top:6px;white-space:normal;break-inside:avoid}
+td.imgc{padding:4px 6px}
+td.imgc a{display:block;width:46px;height:46px;border-radius:6px;overflow:hidden;border:1px solid #e6eaf1;background:#fff}
+td.imgc img{width:100%;height:100%;object-fit:contain;display:block}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.OUT{background:#fbe9e7;color:#912018}
+.CRITICAL{background:#fbdcdc;color:#c11c1c;font-weight:800}
+.LOW{background:#fdf3d6;color:#9a6a00}
+.OK{background:#e3f5ea;color:#1a7a44}
+.AT_RISK{background:#fbe3e3;color:#a4161a}
+.BUFFERED{background:#e6eefb;color:#345d9d}
+.RISKOK{color:#a7b0c0;font-size:11px}
+.daysbad{color:#912018;font-weight:700}
+.dayswarn{color:#b5470f;font-weight:600}
+.muted{color:#a7b0c0}
+.foot{color:#8b95a7;font-size:11.5px;margin-top:14px;line-height:1.7}
+.count{color:#5b6678;font-size:12.5px;font-weight:600;margin:10px 2px}
+td.notes{white-space:normal;min-width:210px}
+.noteinput{width:206px;min-height:32px;resize:vertical;border:1px solid #d6dce6;border-radius:6px;padding:5px 7px;font-family:inherit;font-size:12px;line-height:1.35;background:#fff}
+.noteinput:focus{border-color:#1b6fd4;outline:none}
+.notestat{font-size:10px;color:#a7b0c0;margin-top:2px;min-height:12px}
+.notestat.saving{color:#b5470f}.notestat.saved{color:#1a7a44}.notestat.failed{color:#a4161a;font-weight:700}
+.costin{width:74px;border:1px solid #d6dce6;border-radius:6px;padding:4px 6px;font-size:12.5px;text-align:right;font-family:inherit;background:#fffdf5}
+.costin:focus{border-color:#1b6fd4;outline:none}
+.costin.edited{background:#fff3d6;border-color:#cc9a00}
+.tagin{width:96px;border:1px solid #d6dce6;border-radius:6px;padding:4px 6px;font-size:12px;font-family:inherit;background:#f7fafd}
+.tagin:focus{border-color:#1b6fd4;outline:none}
+.tagin.edited{background:#e6f2ea;border-color:#1a7a44}
+.trbtn{border:1px solid #d6dce6;background:#fff;border-radius:6px;padding:3px 8px;font-size:11.5px;cursor:pointer;color:#345d9d;font-weight:700}
+.trbtn.open{background:#345d9d;color:#fff}
+tr.trendrow td{background:#fbfcfe;padding:10px 16px}
+.tooltip{position:fixed;pointer-events:none;z-index:70;background:#fff;border:1px solid #e6eaf1;box-shadow:0 4px 14px rgba(20,30,60,.16);border-radius:9px;padding:8px 11px;font-size:12.5px;display:none;max-width:250px}
+.tooltip .tt-t{color:#8b95a7;font-size:11px;margin-bottom:3px}
+.tooltip .tt-v{font-weight:700}
+
+#loginOverlay{position:fixed;inset:0;background:#f4f6fa;z-index:200;display:flex;align-items:center;justify-content:center}
+.loginbox{background:#fff;border:1px solid #e6eaf1;border-radius:14px;padding:34px 38px;width:360px;box-shadow:0 8px 30px rgba(20,30,60,.10)}
+.loginbox .eyebrow{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#3a4046}
+.loginbox h2{margin:2px 0 18px;font-size:20px}
+.loginbox input{width:100%;border:1px solid #d6dce6;border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px;box-sizing:border-box}
+.loginbox button{width:100%;background:#1b2333;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+.loginbox .err{color:#a4161a;font-size:12.5px;min-height:16px;margin-bottom:6px}
+</style></head>
+<body>
+<div id="loginOverlay"><form class="loginbox" id="loginForm">
+  <div class="eyebrow">Funky Junque</div><h2>Inventory Dashboard</h2>
+  <input type="email" id="liEmail" placeholder="Email" autocomplete="username" required>
+  <input type="password" id="liPass" placeholder="Password" autocomplete="current-password" required>
+  <div class="err" id="liErr"></div>
+  <button type="submit">Sign in</button>
+</form></div>
+<div class="wrap" id="appwrap" style="visibility:hidden">
+<div class="brandhead"><div class="brandtitle"><div class="eyebrow">Funky Junque</div><h1>FBA Inventory &amp; Restock</h1></div></div><div class="brandbar"></div>
+<a href="#" id="signout" style="float:right;margin-top:-46px;font-size:12px;color:#5b6678">Sign out</a>
+<a href="#" id="chpw" style="float:right;margin-top:-46px;margin-right:76px;font-size:12px;color:#5b6678">Change password</a>
+<div id="pwOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,30,50,.45);z-index:210;align-items:center;justify-content:center">
+  <form class="loginbox" id="pwForm">
+    <h2 style="margin:0 0 16px">Change password</h2>
+    <input type="password" id="pw1" placeholder="New password (8+ characters)" minlength="8" autocomplete="new-password" required>
+    <input type="password" id="pw2" placeholder="Repeat new password" autocomplete="new-password" required>
+    <div class="err" id="pwErr"></div>
+    <button type="submit">Save new password</button>
+    <button type="button" id="pwCancel" style="margin-top:8px;background:#fff;color:#485263;border:1px solid #d6dce6">Cancel</button>
+  </form>
+</div>
+<div class="sub" id="sub"></div>
+<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API connected.</b> Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
+<div class="cards" id="cards"></div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>30-day sales by FBA cover tier</h2>
+    <div class="psub">Where current revenue sits - how much of it rides on thin FBA cover</div>
+    <svg id="tierChart" width="100%" height="180" role="img" aria-label="Bar chart of 30 day sales by FBA cover tier"></svg>
+  </div>
+  <div class="panel">
+    <h2>Inventory age</h2>
+    <div class="psub" id="ageSub">On-hand units by age bucket (all FBA inventory)</div>
+    <svg id="ageChart" width="100%" height="180" role="img" aria-label="Bar chart of on-hand units by age bucket"></svg>
+  </div>
+  <div class="panel">
+    <h2>Inbound pipeline - "Amazon's hands"</h2>
+    <div class="psub" id="inbSub">Units on their way to or inside Amazon, by stage</div>
+    <svg id="inbChart" width="100%" height="180" role="img" aria-label="Bar chart of inbound units by stage"></svg>
+  </div>
+</div>
+
+<div class="quickrow" id="scoperow"></div>
+<div class="toolbar">
+  <div class="filters" id="filters"></div>
+  <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword - or paste a list of ASINs/SKUs" title="Paste several ASINs or SKUs (one per line, or separated by commas) to find them all at once">
+  <input class="who" id="whoami" placeholder="Your name (for notes)">
+  <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
+  <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
+  <button class="colbtn" id="refreshBtn" type="button" title="Pull the latest data from the database and recompute (fast - no waiting)">&#8635; Refresh</button>
+  <button class="colbtn" id="csvBtn" type="button" title="Download the rows currently shown (after filters) as a spreadsheet">Export CSV</button>
+</div>
+<div class="quickrow" id="quickrow"><span class="qlbl">Quick views</span></div>
+<div class="quickrow" id="tagrow"></div>
+<div class="quickrow" id="viewsrow"></div>
+<div class="quickrow"><button class="qbtn" id="legendBtn" type="button" style="border-style:solid;background:#fff;color:#485263">How the flags work &#9662;</button></div>
+<div id="legendBox" style="display:none;background:#fbfcfe;border:1px dashed #b9c6da;border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.8;color:#3a4657;margin-bottom:12px">
+<b>Velocity</b> = trailing-30-day units (all channels, FBA + FBM) &divide; 30 = units/day.<br>
+<b>FBA Days</b> = FBA sellable stock &divide; velocity &rarr; the tier: <span class="badge OUT">OUT</span> 0 in FBA &nbsp; <span class="badge CRITICAL">HIGH</span> under 7 days &nbsp; <span class="badge LOW">LOW</span> 7&ndash;14 days &nbsp; <span class="badge OK">OK</span> 14+ days.<br>
+<b>Total Days</b> adds FBM stock on top of FBA (the backstop if FBA runs dry &mdash; slower shipping, but the sale isn't lost).<br>
+<b>Sales Risk</b>: <span class="badge AT_RISK">AT RISK</span> = FBA + FBM <i>and</i> inbound together still cover under 14 days &mdash; these dollars are genuinely exposed; restock decisions start here. <span class="badge BUFFERED">BUFFERED</span> = FBA is short but FBM stock or inbound already on its way restores cover &mdash; watch, don't panic.<br>
+<b>Why four sales windows?</b> 1-day catches what moved yesterday; 7-day smooths out one big order distorting the rate; 30-day sets the restock math; 12-month shows seasonality so winter sends aren't sized off August sales. Check the 12-mo trend before trusting any single window.
+</div>
+<div class="bulkbar" id="bulkbar" hidden></div>
+<div class="count" id="count"></div>
+<div class="tablewrap"><table id="tbl">
+<thead><tr id="hrow"></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="foot" id="foot"></div>
+</div>
+<div class="tooltip" id="tt"></div>
+<script type="text/plain" id="mainjs">
+const DATA = window.__FJ_DATA__;
+const S=DATA.summary, R=DATA.rows, MONTHS=DATA.months||[];
+const COSTS0=window.__FJ_COSTS__||{};
+for(const r of R){const c=COSTS0[r.asin];if(c!=null&&r.u30){const asp=r.sales/r.u30;r._gm=asp?Math.round((asp-c)/asp*1000)/1000:null;}}
+const TORDER={OUT:0,CRITICAL:1,LOW:2,OK:3};
+const RORDER={AT_RISK:0,BUFFERED:1,OK:2};
+const money=n=>'$'+Math.round(n).toLocaleString();
+const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tierLabel=t=>t==='CRITICAL'?'HIGH':t; // David: show CRITICAL as HIGH (red); internal value stays CRITICAL
+let TAG_EDITS=window.__FJ_TAGS__||{};
+const DIRTY=new Set(); // asins with a local edit not yet confirmed saved - never clobbered by a refresh
+let lastChecked=new Date(); // when THIS browser last loaded/refreshed data from the DB
+function renderSub(){document.getElementById('sub').innerHTML=
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
+renderSub();
+
+/* KPI cards + charts recompute for the active scope; renderStats() is defined
+   after the chart helpers and called from there. */
+
+/* ---- charts ---- */
+const tt=document.getElementById('tt');
+function ttShow(t1txt,t2txt,e){tt.replaceChildren();
+  const t1=document.createElement('div');t1.className='tt-t';t1.textContent=t1txt;
+  const t2=document.createElement('div');t2.className='tt-v';t2.textContent=t2txt;
+  tt.append(t1,t2);tt.style.display='block';
+  tt.style.left=Math.min(e.clientX+14,innerWidth-170)+'px';tt.style.top=(e.clientY+14)+'px';}
+function bars(id,buckets,colors,fmt,sub){
+  const svg=document.getElementById(id); if(!svg) return;
+  const draw=()=>{
+    svg.replaceChildren();
+    const W=svg.clientWidth||420,H=180,m={t:24,b:30,l:8,r:8};
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    const NS='http://www.w3.org/2000/svg';
+    const max=Math.max(...buckets.map(b=>b[1]),1);
+    const band=(W-m.l-m.r)/buckets.length,bw=Math.min(36,band*.5);
+    buckets.forEach((b,i)=>{
+      const v=b[1],bh=Math.max(v>0?3:0,(H-m.t-m.b)*v/max),bx=m.l+band*i+(band-bw)/2,by=H-m.b-bh;
+      if(v>0){const p=document.createElementNS(NS,'path');const r=Math.min(4,bh);
+      p.setAttribute('d',`M${bx} ${H-m.b} V${by+r} Q${bx} ${by} ${bx+r} ${by} H${bx+bw-r} Q${bx+bw} ${by} ${bx+bw} ${by+r} V${H-m.b} Z`);
+      p.setAttribute('fill',colors[i]||colors[colors.length-1]);svg.appendChild(p);}
+      const cap=document.createElementNS(NS,'text');
+      cap.setAttribute('x',bx+bw/2);cap.setAttribute('y',by-7);cap.setAttribute('text-anchor','middle');
+      cap.setAttribute('font-size',11.5);cap.setAttribute('font-weight',700);cap.setAttribute('fill','#1b2333');
+      cap.textContent=fmt(v);svg.appendChild(cap);
+      const lb=document.createElementNS(NS,'text');
+      lb.setAttribute('x',bx+bw/2);lb.setAttribute('y',H-m.b+15);lb.setAttribute('text-anchor','middle');
+      lb.setAttribute('font-size',10.5);lb.setAttribute('fill','#7a8499');lb.textContent=b[0];svg.appendChild(lb);
+      if(b[2]){const l2=document.createElementNS(NS,'text');
+      l2.setAttribute('x',bx+bw/2);l2.setAttribute('y',H-m.b+27);l2.setAttribute('text-anchor','middle');
+      l2.setAttribute('font-size',9.5);l2.setAttribute('fill','#a7b0c0');l2.textContent=b[2];svg.appendChild(l2);}
+      const hot=document.createElementNS(NS,'rect');
+      hot.setAttribute('x',m.l+band*i);hot.setAttribute('y',0);hot.setAttribute('width',band);hot.setAttribute('height',H-m.b);hot.setAttribute('fill','transparent');
+      hot.addEventListener('pointermove',e=>ttShow(b[0],(sub||'')+v.toLocaleString()+(sub?'':' units'),e));
+      hot.addEventListener('pointerleave',()=>tt.style.display='none');
+      svg.appendChild(hot);
+    });
+    const base=document.createElementNS(NS,'line');
+    base.setAttribute('x1',m.l);base.setAttribute('x2',W-m.r);base.setAttribute('y1',H-m.b);base.setAttribute('y2',H-m.b);
+    base.setAttribute('stroke','#d6dce6');base.setAttribute('stroke-width',1);svg.appendChild(base);
+  };
+  svg._draw=draw;
+  if(!svg._bound){svg._bound=1;addEventListener('resize',()=>svg._draw&&svg._draw());}
+  draw();
+}
+const fmtU=v=>v>=10000?Math.round(v/1000)+'K':v.toLocaleString();
+function gmOf(r){return r._gm!=null?r._gm:r.gm;}
+function renderStats(){
+  const B=baseRows(),isTop=curScope==='top';
+  const flagged=B.filter(r=>r.tier!=='OK'),outR=B.filter(r=>r.tier==='OUT');
+  const atRisk=B.filter(r=>r.risk==='AT_RISK'),buff=B.filter(r=>r.risk==='BUFFERED');
+  const revAtRisk=atRisk.reduce((a,r)=>a+r.sales,0),revBuff=buff.reduce((a,r)=>a+r.sales,0);
+  const priced=B.filter(r=>gmOf(r)!=null&&r.sales>0);
+  const pSales=priced.reduce((a,r)=>a+r.sales,0);
+  const gm=pSales?priced.reduce((a,r)=>a+r.sales*gmOf(r),0)/pSales:null;
+  const marginAtRisk=priced.filter(r=>r.risk==='AT_RISK').reduce((a,r)=>a+r.sales*gmOf(r),0);
+  const inbTot=B.reduce((a,r)=>a+(r.inbound||0),0);
+  const flagInb=flagged.filter(r=>r.inbound>0).length;
+  const cards=[
+    [isTop?'Top Sellers ($1K+)':'Active ASINs',B.length,'',isTop?'child ASINs over $1K / 30d':'sold in 12 mo, or stock anywhere'],
+    ['FBA Flagged (<'+S.coverFlagDays+'d)',flagged.length,'',outR.length.toLocaleString()+' out, '+B.filter(r=>r.tier==='CRITICAL').length.toLocaleString()+' high'],
+    ['Out of FBA',outR.length,'out','0 units in FBA'],
+    ['Sales at Risk',money(revAtRisk),'risk',atRisk.length.toLocaleString()+' ASINs, FBA+FBM+inbound short'],
+    ['FBM Buffered',money(revBuff),'',buff.length.toLocaleString()+' ASINs covered'],
+    ['Blended GM %',gm!=null?Math.round(gm*1000)/10+'%':'-','',money(marginAtRisk)+' margin at risk'],
+    ['Inbound to Amazon',inbTot,'',flagInb.toLocaleString()+' flagged ASINs have stock en route']];
+  document.getElementById('cards').innerHTML=cards.map(c=>
+    `<div class="card ${c[2]}"><div class="lbl">${c[0]}</div><div class="val">${typeof c[1]==='number'?c[1].toLocaleString():c[1]}</div><div class="vsub">${c[3]}</div></div>`).join('');
+  const tiers=[['OUT','#912018'],['CRITICAL','#d4541a'],['LOW','#cc9a00'],['OK','#1a7a44']];
+  bars('tierChart',tiers.map(([t])=>[tierLabel(t),Math.round(B.filter(r=>r.tier===t).reduce((a,r)=>a+r.sales,0)),B.filter(r=>r.tier===t).length.toLocaleString()+' ASINs']),
+    tiers.map(t=>t[1]),v=>'$'+(v>=1000?Math.round(v/1000)+'K':v),'$');
+  const hasAged=B.length&&B[0].aged!==undefined;
+  const A=hasAged?[0,1,2,3,4].map(i=>B.reduce((a,r)=>a+((r.aged||[])[i]||0),0)):DATA.aged;
+  const ltsf=hasAged?B.reduce((a,r)=>a+(r.ais||0),0):DATA.ltsf;
+  bars('ageChart',[['0-90',A[0]],['91-180',A[1]],['181-270',A[2]],['271-365',A[3]],['365+',A[4]]],
+    ['#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281'],fmtU);
+  document.getElementById('ageSub').textContent=(A[2]+A[3]+A[4]).toLocaleString()+' units aged 181+ days · $'+Math.round(ltsf).toLocaleString()+' long-term surcharge accruing'+(hasAged?'':' (account-wide)');
+  const hasStg=B.length&&B[0].inbW!==undefined;
+  const stages=hasStg?[['Working',B.reduce((a,r)=>a+(r.inbW||0),0)],['Shipped',B.reduce((a,r)=>a+(r.inbS||0),0)],['Receiving',B.reduce((a,r)=>a+(r.inbR||0),0)]]:DATA.inboundStages;
+  bars('inbChart',stages,['#86b6ef','#2a78d6','#104281'],fmtU);
+}
+/* initial renderStats() runs after the scope state is declared (filters section) */
+
+/* ---- columns ---- */
+const COLS=[
+  ['sel','',1],['img','Image',1],['tier','FBA Tier',1],['parent','Parent ASIN',1],['asin','ASIN',1],['name','Product',1],
+  ['sku','SKU',1],['parentSku','Parent SKU',1],['color','Color',1],['season','Season',1],
+  ['tags','Tags',1],['kw','Keyword',0],['category','Category',0],
+  ['price','Price',1],['cost','Unit Cost',1],['gm','GM %',1],
+  ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
+  ['sales','30d Sales $',0],['daily','Units/day',0],
+  ['inv','FBA Inv',1],['fbaDays','FBA Days',1],['fbm','FBM Inv',1],['inbound','Inbound',1],
+  ['combDays','Total Days',1],['restock','Restock Qty',1],['risk','Sales Risk',1],['trend','Trend',1],['notes','Notes',1]];
+let visible={};COLS.forEach(c=>visible[c[0]]=!!c[2]);
+try{const s=localStorage.getItem('fj_cols');if(s)visible=Object.assign(visible,JSON.parse(s));}catch(e){}
+visible.sel=true; // selection column always visible
+/* per-user column order + widths (this browser; also captured in saved views) */
+const COLKEYS=COLS.map(c=>c[0]);
+let colOrder=[],colW={};
+try{const o=JSON.parse(localStorage.getItem('fj_colorder')||'[]');if(Array.isArray(o))colOrder=o;
+  const w=JSON.parse(localStorage.getItem('fj_colw')||'{}');if(w&&typeof w==='object')colW=w;}catch(e){}
+function orderedCols(){
+  const by={};COLS.forEach(c=>by[c[0]]=c);
+  const keys=['sel'];
+  colOrder.forEach(k=>{if(by[k]&&!keys.includes(k))keys.push(k);});
+  // columns not in the saved order (e.g. added in a later release) slot in after their default neighbour
+  COLS.forEach((c,i)=>{if(keys.includes(c[0]))return;
+    const prev=i>0?keys.indexOf(COLS[i-1][0]):-1;keys.splice(prev+1,0,c[0]);});
+  return keys.map(k=>by[k]);
+}
+function saveCols(){try{localStorage.setItem('fj_cols',JSON.stringify(visible));
+  localStorage.setItem('fj_colorder',JSON.stringify(colOrder));localStorage.setItem('fj_colw',JSON.stringify(colW));}catch(e){}}
+function moveCol(k,targetK,after){
+  if(k==='sel'||targetK==='sel'||k===targetK)return;
+  const keys=orderedCols().map(c=>c[0]).filter(x=>x!=='sel'&&x!==k);
+  const i=keys.indexOf(targetK);if(i<0)return;
+  keys.splice(after?i+1:i,0,k);colOrder=keys;saveCols();
+}
+function applyColW(){
+  let st=document.getElementById('colwStyle');
+  if(!st){st=document.createElement('style');st.id='colwStyle';document.head.appendChild(st);}
+  st.textContent=Object.keys(colW).filter(k=>COLKEYS.includes(k)&&k!=='sel'&&colW[k]>0).map(k=>{const w=Math.round(colW[k]);
+    return '#hrow th[data-k="'+k+'"],#tb td[data-c="'+k+'"]{width:'+w+'px!important;min-width:'+w+'px!important;max-width:'+w+'px!important;overflow:hidden;text-overflow:ellipsis}'
+      +'#tb td[data-c="'+k+'"] .nametrunc{max-width:none}'
+      +'#tb td[data-c="'+k+'"] input,#tb td[data-c="'+k+'"] textarea{width:100%;box-sizing:border-box}';}).join('\n');
+}
+applyColW();
+function resetColLayout(){colOrder=[];colW={};saveCols();applyColW();renderColPop();render();}
+const colPop=document.getElementById('colPop');
+function renderColPop(){
+  colPop.replaceChildren();
+  orderedCols().forEach(([k,label])=>{
+    if(k==='sel')return; // selection column is always on, not user-hideable
+    const l=document.createElement('label');
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!visible[k];
+    cb.addEventListener('change',()=>{visible[k]=cb.checked;saveCols();render();});
+    l.append(cb,document.createTextNode(' '+label));colPop.appendChild(l);
+  });
+  const hint=document.createElement('div');hint.className='colhint';
+  hint.textContent='Drag a column header to move it. Drag its right edge to resize (double-click the edge to reset).';
+  colPop.appendChild(hint);
+  const rb=document.createElement('button');rb.type='button';rb.className='colreset';rb.textContent='Reset column order & widths';
+  rb.onclick=resetColLayout;colPop.appendChild(rb);
+}
+renderColPop();
+document.getElementById('colBtn').onclick=e=>{const fp=document.getElementById('filtPop');if(fp)fp.style.display='none';colPop.style.display=colPop.style.display==='block'?'none':'block';e.stopPropagation();};
+document.addEventListener('click',e=>{if(!colPop.contains(e.target)&&e.target.id!=='colBtn')colPop.style.display='none';});
+
+/* ---- filters ---- */
+let curScope='top',curFilter='FLAGGED',curSearch='',sortK='fbaDays',sortAsc=true,quick=null;
+function baseRows(){return curScope==='top'?R.filter(r=>r.top!==false):R.slice();}
+const tierDefs=[['FLAGGED','#1b2333',r=>r.tier!=='OK'],['AT RISK','#a4161a',r=>r.risk==='AT_RISK'],['OUT','#912018',r=>r.tier==='OUT'],['CRITICAL','#d4541a',r=>r.tier==='CRITICAL'],['LOW','#cc9a00',r=>r.tier==='LOW'],['ALL','#5b6678',r=>true]];
+function renderTierChips(){
+  const B=baseRows();
+  document.getElementById('filters').innerHTML=tierDefs.map(t=>
+    `<button class="fbtn" data-f="${t[0]}"><span class="dot" style="background:${t[1]}"></span>${tierLabel(t[0])} <span class="cnt">${B.filter(t[2]).length.toLocaleString()}</span></button>`).join('');
+  document.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{curFilter=b.dataset.f;render()});
+}
+renderTierChips();
+renderStats();
+const scopeDefs=[['top','Top sellers ($1K+/30d)'],['all','All active ASINs']];
+function renderScope(){
+  const sr=document.getElementById('scoperow');
+  sr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Scope';sr.appendChild(lbl);
+  const hasScopes=R.some(r=>r.top===false);
+  if(!hasScopes){sr.style.display='none';return;}
+  scopeDefs.forEach(([k,label])=>{
+    const b=document.createElement('button');b.className='qbtn'+(curScope===k?' active':'');b.type='button';
+    const n=(k==='top'?R.filter(r=>r.top!==false):R).length;
+    b.innerHTML=esc(label)+' <span class="cnt">'+n.toLocaleString()+'</span>';
+    b.onclick=()=>{if(curScope!==k){curScope=k;renderScope();renderStats();renderTierChips();renderQuickBtns();renderTagChips();render();}};
+    sr.appendChild(b);
+  });
+}
+const QUICK=[
+  ['sold5','Sold 5+ yesterday',r=>r.u1>=5],
+  ['winterSold','Winter sold yesterday',r=>r.winter&&r.u1>0],
+  ['new6','New (last 6 mo)',r=>(r.added||'')>=S.newCutoff],
+  ['hasInb','Stock en route',r=>r.inbound>0],
+  ['noFBM','No FBM backup',r=>r.fbm===0&&r.tier!=='OK'],
+  ['fbmOnly','FBM-only',r=>!!r.fbmOnly]];
+const qr=document.getElementById('quickrow');
+function renderQuickBtns(){
+  qr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Quick views';qr.appendChild(lbl);
+  const B=baseRows();
+  QUICK.forEach(([k,label,fn])=>{
+    const b=document.createElement('button');b.className='qbtn'+(quick===k?' active':'');b.type='button';
+    b.innerHTML=esc(label)+' <span class="cnt">'+B.filter(fn).length.toLocaleString()+'</span>';
+    b.onclick=()=>{quick=quick===k?null:k;renderQuickBtns();render();};
+    b.dataset.q=k;qr.appendChild(b);
+  });
+}
+renderQuickBtns();
+renderScope();
+document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
+/* pasting a column of ASINs/SKUs: keep the line breaks as separators instead of letting the browser squash them */
+document.getElementById('search').addEventListener('paste',e=>{
+  const txt=(e.clipboardData||window.clipboardData).getData('text')||'';
+  if(!/[\n\r\t]/.test(txt.trim()))return;
+  e.preventDefault();
+  const parts=txt.split(/[\n\r\t,;]+/).map(t=>t.trim()).filter(Boolean);
+  const inp=e.target,a=inp.selectionStart||0,b=inp.selectionEnd||0;
+  const before=inp.value.slice(0,a),after=inp.value.slice(b);
+  inp.value=(before&&!/[,;]\s*$/.test(before)?before+', ':before)+[...new Set(parts)].join(', ')+(after?', '+after:'');
+  curSearch=inp.value.toLowerCase();render();
+});
+/* several terms (comma / semicolon / newline separated, or a run of ASINs) = show rows matching ANY of them */
+function searchTerms(s){
+  s=(s||'').trim();if(!s)return [];
+  if(/[,;\n]/.test(s))return [...new Set(s.split(/[,;\n]+/).map(t=>t.trim()).filter(Boolean))];
+  const ws=s.split(/\s+/);
+  if(ws.length>1&&ws.every(t=>/^b0[a-z0-9]{8}$/.test(t)))return [...new Set(ws)];
+  return [s];
+}
+let searchMiss=[];
+
+/* ---- condition filters (build-your-own) ---- */
+const FIELDS=[
+ ['sales','30d Sales $','num'],['u1','1-Day units','num'],['u7','7-Day units','num'],['u30','30-Day units','num'],
+ ['u365','12-Mo units','num'],['daily','Units/day','num'],['inv','FBA Inv','num'],['fbaDays','FBA Days','num'],
+ ['fbm','FBM Inv','num'],['inbound','Inbound','num'],['combDays','Total Days','num'],['price','Price','num'],
+ ['cost','Unit Cost','num'],['gm','GM %','num'],['name','Product name','text'],['asin','ASIN','text'],
+ ['kw','Keyword','text'],['category','Category','text'],['tags','Tags','text']];
+const NOPS=[['gt','>'],['gte','>='],['lt','<'],['lte','<='],['eq','='],['ne','!=']];
+const TOPS=[['has','contains'],['nhas',"doesn't contain"],['is','is'],['isnot','is not']];
+let CONDS=[],condDraft=[];
+function fval(r,f){
+  if(f==='cost')return COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:r.cost;
+  if(f==='gm'){const g=r._gm!=null?r._gm:r.gm;return g==null?null:Math.round(g*1000)/10;}
+  if(f==='tags')return effTags(r).join(', ');
+  return r[f];
+}
+function condTest(r,c){
+  const t=(FIELDS.find(x=>x[0]===c.f)||[])[2],v=fval(r,c.f);
+  if(t==='num'){const n=Number(c.v);if(isNaN(n))return true;if(v==null)return c.op==='ne';
+    return c.op==='gt'?v>n:c.op==='gte'?v>=n:c.op==='lt'?v<n:c.op==='lte'?v<=n:c.op==='eq'?v===n:v!==n;}
+  const s=String(v==null?'':v).toLowerCase(),q=String(c.v||'').toLowerCase();
+  return c.op==='has'?s.includes(q):c.op==='nhas'?!s.includes(q):c.op==='is'?s===q:s!==q;
+}
+const filtPop=document.getElementById('filtPop'),filtBtn=document.getElementById('filtBtn');
+function renderFiltPop(){
+  filtPop.replaceChildren();
+  const hint=document.createElement('div');hint.className='fhint';hint.textContent='Show only rows matching ALL of these (works together with the chips, quick views, tags and search).';filtPop.appendChild(hint);
+  if(!condDraft.length)condDraft.push({f:'sales',op:'gt',v:''});
+  condDraft.forEach((c,i)=>{
+    const row=document.createElement('div');row.className='frow';
+    const and=document.createElement('span');and.className='fand';and.textContent=i?'&':'';row.appendChild(and);
+    const fs=document.createElement('select');fs.className='ffield';
+    FIELDS.forEach(([k,l])=>{const o=document.createElement('option');o.value=k;o.textContent=l;if(c.f===k)o.selected=true;fs.appendChild(o);});
+    fs.onchange=()=>{c.f=fs.value;const t=FIELDS.find(x=>x[0]===c.f)[2];c.op=t==='num'?'gt':'has';c.v='';renderFiltPop();};
+    row.appendChild(fs);
+    const t=FIELDS.find(x=>x[0]===c.f)[2];
+    const os=document.createElement('select');os.className='fop';
+    (t==='num'?NOPS:TOPS).forEach(([k,l])=>{const o=document.createElement('option');o.value=k;o.textContent=l;if(c.op===k)o.selected=true;os.appendChild(o);});
+    os.onchange=()=>c.op=os.value;row.appendChild(os);
+    const vi=document.createElement('input');vi.className='fval';vi.value=c.v==null?'':c.v;
+    vi.type=t==='num'?'number':'text';vi.placeholder=t==='num'?'value':'text...';
+    vi.oninput=()=>c.v=vi.value;
+    vi.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();applyConds();}};
+    row.appendChild(vi);
+    const del=document.createElement('button');del.className='fdel';del.type='button';del.textContent='✕';del.title='Remove condition';
+    del.onclick=()=>{condDraft.splice(i,1);renderFiltPop();};row.appendChild(del);
+    filtPop.appendChild(row);
+  });
+  const add=document.createElement('button');add.className='fadd';add.type='button';add.textContent='+ Add condition';
+  add.onclick=()=>{condDraft.push({f:'sales',op:'gt',v:''});renderFiltPop();};filtPop.appendChild(add);
+  const btns=document.createElement('div');btns.className='fbtns';
+  const clr=document.createElement('button');clr.className='fcancel';clr.type='button';clr.textContent='Clear all';
+  clr.onclick=()=>{condDraft=[];CONDS=[];filtPop.style.display='none';syncFiltBtn();render();};
+  const can=document.createElement('button');can.className='fcancel';can.type='button';can.textContent='Cancel';
+  can.onclick=()=>{filtPop.style.display='none';};
+  const ap=document.createElement('button');ap.className='fapply';ap.type='button';ap.textContent='Apply';
+  ap.onclick=applyConds;
+  btns.append(clr,can,ap);filtPop.appendChild(btns);
+}
+function applyConds(){
+  CONDS=condDraft.filter(c=>c.v!==''&&c.v!=null).map(c=>({...c}));
+  filtPop.style.display='none';syncFiltBtn();render();
+}
+function syncFiltBtn(){filtBtn.innerHTML='Filters ▾'+(CONDS.length?'<span class="cnt2">'+CONDS.length+'</span>':'');}
+filtBtn.onclick=e=>{e.stopPropagation();
+  const open=filtPop.style.display==='block';
+  document.getElementById('colPop').style.display='none';
+  if(!open){condDraft=CONDS.length?CONDS.map(c=>({...c})):[];renderFiltPop();filtPop.style.display='block';}
+  else filtPop.style.display='none';};
+document.addEventListener('click',e=>{if(e.target.isConnected&&!filtPop.contains(e.target)&&e.target!==filtBtn)filtPop.style.display='none';});
+
+/* ---- my views (personal saved views - each person sees only their own) ---- */
+let MYVIEWS=[],activeView=null;
+function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc,
+  cols:{order:orderedCols().map(c=>c[0]).filter(k=>k!=='sel'),visible:Object.assign({},visible),w:Object.assign({},colW)}};}
+function applyView(v){
+  const d=v.def||{};
+  curScope=d.scope||'top';curFilter=d.tier||'FLAGGED';quick=d.quick||null;curTag=d.tag||null;
+  curSearch=d.search||'';document.getElementById('search').value=curSearch;
+  CONDS=(d.conds||[]).map(c=>({...c}));syncFiltBtn();
+  if(d.sortK){sortK=d.sortK;sortAsc=!!d.sortAsc;}
+  if(d.cols){ // views saved before the column-layout release have no cols -> layout left as is
+    if(Array.isArray(d.cols.order))colOrder=d.cols.order.slice();
+    if(d.cols.visible){COLS.forEach(c=>{if(c[0] in d.cols.visible)visible[c[0]]=!!d.cols.visible[c[0]];});visible.sel=true;}
+    colW=Object.assign({},d.cols.w||{});
+    saveCols();applyColW();renderColPop();
+  }
+  activeView=v.id;
+  renderScope();renderStats();renderTierChips();renderQuickBtns();renderViews();render();
+}
+function persistLocalViews(){try{localStorage.setItem('fj_views',JSON.stringify(MYVIEWS));}catch(e){}}
+function loadViews(){
+  if(window.sb){window.sb.from('saved_views').select('id,name,def').order('created_at')
+    .then(({data})=>{MYVIEWS=data||[];renderViews();}).catch(()=>{});}
+  else{try{MYVIEWS=JSON.parse(localStorage.getItem('fj_views')||'[]');}catch(e){MYVIEWS=[];}renderViews();}
+}
+function saveCurrentView(){
+  const name=prompt('Name this view (only you will see it):');
+  if(!name||!name.trim())return;
+  const def=viewDef();
+  if(window.sb){window.sb.from('saved_views').insert({name:name.trim(),def:def}).select('id,name,def')
+    .then(({data,error})=>{if(error||!data||!data.length){alert('Could not save the view - try again.');return;}
+      MYVIEWS.push(data[0]);activeView=data[0].id;renderViews();});}
+  else{const v={id:'l'+Date.now(),name:name.trim(),def:def};MYVIEWS.push(v);persistLocalViews();activeView=v.id;renderViews();}
+}
+function deleteView(v){
+  if(!confirm('Delete your view "'+v.name+'"?'))return;
+  MYVIEWS=MYVIEWS.filter(x=>x.id!==v.id);
+  if(activeView===v.id)activeView=null;
+  if(window.sb)window.sb.from('saved_views').delete().eq('id',v.id).then(()=>{});
+  else persistLocalViews();
+  renderViews();
+}
+function renderViews(){
+  const vr=document.getElementById('viewsrow');vr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='My views';vr.appendChild(lbl);
+  MYVIEWS.forEach(v=>{
+    const b=document.createElement('button');b.className='qbtn vchip'+(activeView===v.id?' active':'');b.type='button';
+    b.title='Apply this saved view';
+    b.appendChild(document.createTextNode(v.name+' '));
+    const x=document.createElement('span');x.className='vx';x.textContent='✕';x.title='Delete this view';
+    x.onclick=e=>{e.stopPropagation();deleteView(v);};b.appendChild(x);
+    b.onclick=()=>applyView(v);
+    vr.appendChild(b);
+  });
+  const sv=document.createElement('button');sv.className='qbtn';sv.type='button';
+  sv.textContent='+ Save current view';
+  sv.title='Saves the current scope, chip, quick view, tag, search, filters, sort and column layout (order, widths, shown/hidden) as a one-click view only you can see';
+  sv.onclick=saveCurrentView;vr.appendChild(sv);
+}
+renderViews();loadViews();
+
+/* ---- CSV export of the current (filtered) rows ---- */
+function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+document.getElementById('csvBtn').onclick=()=>{
+  const cols=['parent_asin','asin','sku','sku_fbm','parent_sku','name','color','season','discontinued','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
+  const lines=[cols.join(',')];
+  filteredRows().forEach(r=>{
+    const g=r._gm!=null?r._gm:r.gm;
+    lines.push([r.parent||'',r.asin,csvEsc(r.skuFba||r.sku||''),csvEsc(r.skuFbm||''),csvEsc(r.parentSku||''),csvEsc(r.name),csvEsc(r.color||''),seasonKey(r.season)||'',r.disc?'Y':'',
+      csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
+      r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
+      g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
+      r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r._restock||0,r.tier,r.risk,
+      csvEsc(r.kw||''),csvEsc(r.category||''),csvEsc((typeof NOTES!=='undefined'&&NOTES[r.asin]||{}).note||'')].join(','));
+  });
+  const blob=new Blob([lines.join('\r\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='fj-inventory-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+};
+
+/* ---- instant refresh: re-pull latest data from the database and recompute ---- */
+const refreshBtn=document.getElementById('refreshBtn');
+let _refreshing=false;
+async function doRefresh(){
+  if(_refreshing||!window.sb)return;
+  _refreshing=true;
+  const orig=refreshBtn.innerHTML;
+  refreshBtn.innerHTML='&#8635; Refreshing...';refreshBtn.disabled=true;
+  // snapshot what's unsaved NOW - a save landing mid-refresh must not let the
+  // re-seed wipe an edit the user still has on screen
+  const wasDirty=new Set(DIRTY);
+  // capture any in-progress note text (typed but not yet auto-saved) so a
+  // re-render can't drop it
+  document.querySelectorAll('#tb .noteinput').forEach(t=>{
+    const a=t.dataset.asin;
+    if(wasDirty.has('n:'+a)){const cur=NOTES[a]||{};NOTES[a]={note:t.value,by:cur.by,at:cur.at};}
+  });
+  try{
+    const [snap,ov,nts]=await Promise.all([
+      window.sb.from('dashboard_snapshot').select('data,updated_at').eq('id',1).single(),
+      window.sb.from('overrides').select('*'),
+      window.sb.from('notes').select('*')]);
+    if(snap.error||!snap.data)throw new Error('snapshot');
+    const nd=snap.data.data;
+    // replace rows + summary + months in place (keep const bindings valid)
+    R.length=0;(nd.rows||[]).forEach(r=>R.push(r));
+    Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,nd.summary||{});
+    MONTHS.length=0;(nd.months||[]).forEach(m=>MONTHS.push(m));
+    if(nd.aged)DATA.aged=nd.aged;if(nd.ltsf!=null)DATA.ltsf=nd.ltsf;if(nd.inboundStages)DATA.inboundStages=nd.inboundStages;
+    // re-seed team edits from server (source of truth), but NEVER clobber a
+    // local edit that hasn't confirmed its save yet (asin in DIRTY)
+    Object.keys(TAG_EDITS).forEach(k=>{if(!wasDirty.has('o:'+k))delete TAG_EDITS[k];});
+    Object.keys(COST_EDITS).forEach(k=>{if(!wasDirty.has('o:'+k))delete COST_EDITS[k];});
+    Object.keys(RESTOCK_EDITS).forEach(k=>{if(!wasDirty.has('o:'+k))delete RESTOCK_EDITS[k];});
+    Object.keys(NOTES).forEach(k=>{if(!wasDirty.has('n:'+k))delete NOTES[k];});
+    (ov.data||[]).forEach(o=>{if(wasDirty.has('o:'+o.asin))return;
+      if(o.tags!=null&&o.tags!=='')TAG_EDITS[o.asin]=o.tags;
+      if(o.cost!=null)COST_EDITS[o.asin]=Number(o.cost);
+      if(o.restock_target!=null)RESTOCK_EDITS[o.asin]=Number(o.restock_target);});
+    (nts.data||[]).forEach(n=>{if(!wasDirty.has('n:'+n.asin))NOTES[n.asin]={note:n.note,by:n.by,at:n.at};});
+    // recompute derived: GM from cost edits, then restock
+    for(const r of R){const c=COST_EDITS[r.asin];if(c!=null&&r.u30){const asp=r.sales/r.u30;r._gm=asp?Math.round((asp-c)/asp*1000)/1000:null;}else{r._gm=undefined;}}
+    window.__FJ_UPDATED__=snap.data.updated_at;
+    lastChecked=new Date();
+    computeRestock();
+    renderSub();renderStats();renderTierChips();renderQuickBtns();renderTagChips();render();
+    refreshBtn.innerHTML='&#10003; Up to date';
+    setTimeout(()=>{refreshBtn.innerHTML=orig;refreshBtn.disabled=false;_refreshing=false;},1600);
+  }catch(e){
+    refreshBtn.innerHTML='Refresh failed - retry';
+    setTimeout(()=>{refreshBtn.innerHTML=orig;refreshBtn.disabled=false;_refreshing=false;},2200);
+  }
+}
+refreshBtn.onclick=doRefresh;
+
+/* ---- sticky left columns ---- */
+const STICKY=['sel','img','tier','parent','asin','name'];
+function stickify(){
+  const ths=[...document.querySelectorAll('#hrow th')];
+  let left=0;const offs={};
+  // frozen zone = the first N shown columns, N = how many of the default frozen set are shown.
+  // So a column dragged into the first N positions becomes frozen, one dragged out scrolls.
+  const nFrozen=COLS.filter(c=>STICKY.includes(c[0])&&visible[c[0]]).length;
+  ths.slice(0,nFrozen).forEach(th=>{offs[th.dataset.k]=left;left+=th.offsetWidth;});
+  const keys=Object.keys(offs),last=keys[keys.length-1];
+  ths.forEach(th=>{const k=th.dataset.k;
+    if(k in offs){th.classList.add('stick');th.style.left=offs[k]+'px';th.classList.toggle('stick-last',k===last);}});
+  document.querySelectorAll('#tb td[data-c]').forEach(td=>{const k=td.dataset.c;
+    if(k in offs){td.classList.add('stick');td.style.left=offs[k]+'px';td.classList.toggle('stick-last',k===last);}});
+}
+
+/* header tooltips */
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, HIGH < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',sku:'Seller SKUs for this ASIN - the FBA SKU and the FBM SKU. Hover a cell to see every SKU on the ASIN; search finds any of them',parentSku:'Parent SKU (from Sellery) - click a value to group its variations',color:'Color (from the Amazon catalog)',season:'Seasonal group (from Xnurta product line) - drives the seasonal restock factor',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Monthly units ordered since Jan 2025; 2025 and 2026 are colored separately so you can compare the same month year-over-year',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x seasonally-adjusted units/day - FBA on hand - inbound. A up/down arrow means the prior-year YoY shape scaled the forecast for the upcoming window. Change the base target + season factors under "How the flags work".'};
+
+/* ---- season chips + seasonal restock factors ---- */
+const SEASON_META={Winter:['Winter','#2a78d6','#e7f0fb'],Summer:['Summer','#c9791b','#fbeede'],Bridal:['Bridal','#a3568c','#f6e9f2'],Other:['Other','#6b7688','#eef1f5']};
+function seasonKey(s){s=(s||'').trim();return SEASON_META[s]?s:(s?'Other':'');}
+function seasonChip(s){const k=seasonKey(s);if(!k)return '<span class="muted">-</span>';const m=SEASON_META[k];return '<span style="display:inline-block;padding:1px 7px;border-radius:9px;background:'+m[2]+';color:'+m[1]+';font-size:11px;font-weight:700">'+m[0]+'</span>';}
+const SEASON_DEFAULTS={Winter:1,Summer:1,Bridal:1,Other:1};
+let SEASON_FACTORS=Object.assign({},SEASON_DEFAULTS);
+try{const sf=window.__FJ_SEASONF__||JSON.parse(localStorage.getItem('fj_seasonf')||'null');if(sf)Object.keys(SEASON_DEFAULTS).forEach(k=>{if(sf[k]>0)SEASON_FACTORS[k]=Number(sf[k]);});}catch(e){}
+
+/* ---- restock quantity: seasonal-adjusted forecast ---- */
+let TARGET_DAYS=45;
+try{const t=Number(localStorage.getItem('fj_target'));if(t>=7&&t<=365)TARGET_DAYS=t;}catch(e){}
+let RESTOCK_EDITS=Object.assign({},window.__FJ_RTARGET__||{}); // per-ASIN days-of-cover override (team-shared)
+// Year-over-year seasonal ramp: how last year's demand in the UPCOMING restock window compared to
+// the trailing window of the same length. >1 = demand climbed into the season a year ago, so build
+// more cover now; <1 = it fell off. Needs 13+ months of history; falls back to 1 (flat) otherwise.
+function yoyRamp(r){
+  const t=r.trend||[]; if(!MONTHS.length||t.length<13) return 1;
+  const win=Math.max(1,Math.round(TARGET_DAYS/30));
+  const last=MONTHS.length-1;
+  let up=0,rec=0,upOK=false,recOK=false;
+  for(let j=1;j<=win;j++){const i=last+j-12; if(i>=0&&i<t.length){up+=t[i]||0;upOK=true;}}
+  for(let j=0;j<win;j++){const i=last-j-12; if(i>=0&&i<t.length){rec+=t[i]||0;recOK=true;}}
+  if(!upOK||!recOK||rec<=0) return 1;
+  return Math.max(0.5,Math.min(3,up/rec));
+}
+// seasonal demand multiplier — precedence: a per-ASIN target wins (human number, no extra scaling) >
+// a manual per-season factor set to something other than 1 > the auto YoY ramp > 1.
+function seasonalMult(r){
+  if(RESTOCK_EDITS[r.asin]!=null) return 1;
+  const k=seasonKey(r.season),mf=k?SEASON_FACTORS[k]:1;
+  if(mf&&mf!==1) return mf;
+  return yoyRamp(r);
+}
+function targetDaysFor(r){return RESTOCK_EDITS[r.asin]!=null?RESTOCK_EDITS[r.asin]:TARGET_DAYS;}
+// effective days of cover incl. the seasonal multiplier (kept for any external refs)
+function targetFor(r){return Math.round(targetDaysFor(r)*seasonalMult(r));}
+// discontinued ASINs are never reordered (sell through existing stock)
+function computeRestock(){
+  R.forEach(r=>{
+    if(!(r.daily>0)||r.fbmOnly||r.disc){r._restock=0;r._smult=1;return;}
+    const sm=seasonalMult(r); r._smult=sm;
+    r._restock=Math.max(0,Math.ceil(r.daily*sm*targetDaysFor(r)-(r.inv+r.inbound)));
+  });
+}
+computeRestock();
+
+/* ---- year colors (YoY seasonality) ---- */
+const YEAR_COLORS={'2025':'#e0902f','2026':'#1c5cab','2027':'#2e8b57','2028':'#8a3fb0'};
+function yearColor(ym){return YEAR_COLORS[String(ym||'').slice(0,4)]||'#7a8499';}
+
+/* ---- inline sparkline (two-color by year) ---- */
+function sparkSVG(r){
+  const v=r.trend||[];
+  if(!v.length||!v.some(x=>x>0))return '<span style="display:inline-block;width:64px"></span>';
+  const w=64,h=16,max=Math.max(...v,1),n=Math.max(1,v.length-1);
+  const X=i=>((i/n)*(w-2)+1),Y=x=>(h-1-(x/max)*(h-3));
+  let segs='';
+  for(let i=1;i<v.length;i++){
+    segs+='<line x1="'+X(i-1).toFixed(1)+'" y1="'+Y(v[i-1]).toFixed(1)+'" x2="'+X(i).toFixed(1)+'" y2="'+Y(v[i]).toFixed(1)+'" stroke="'+yearColor(MONTHS[i])+'" stroke-width="1.4"/>';
+  }
+  return '<svg width="'+w+'" height="'+h+'" style="vertical-align:middle;margin-right:4px">'+segs+'</svg>';
+}
+
+/* ---- per-tag filter chips (dynamic) ---- */
+let curTag=null;
+function effTags(r){return String(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')).split(',').map(t=>t.trim().toLowerCase()).filter(Boolean);}
+function renderTagChips(){
+  const tr=document.getElementById('tagrow');
+  tr.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='qlbl';lbl.textContent='Tags';tr.appendChild(lbl);
+  const bt=document.createElement('button');bt.className='qbtn';bt.type='button';bt.textContent='+ Bulk tag shown';
+  bt.title='Add a tag to every ASIN currently shown (after filters/search)';bt.style.borderStyle='solid';
+  bt.onclick=bulkAddTag;tr.appendChild(bt);
+  const counts={};
+  baseRows().forEach(r=>effTags(r).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  if(!names.length){const m=document.createElement('span');m.className='muted';m.style.fontSize='12px';m.textContent='Type a tag on any row (e.g. best, winter) and it becomes a filter here.';tr.appendChild(m);}
+  names.forEach(t=>{
+    const b=document.createElement('button');b.className='qbtn'+(curTag===t?' active':'');b.type='button';
+    b.append(document.createTextNode(t+' '));
+    const c=document.createElement('span');c.className='cnt';c.textContent=counts[t];b.appendChild(c);
+    b.onclick=()=>{curTag=curTag===t?null:t;render();};
+    tr.appendChild(b);
+  });
+}
+
+/* ---- notes (team database) ---- */
+let NOTES=window.__FJ_NOTES__||{},NOTE_TIMERS={};
+function whoEl(){return document.getElementById('whoami');}
+function getWho(){const el=whoEl();return (el&&el.value.trim())||window.__FJ_USER__||'Funky Junque';}
+function fmtWhen(v){if(!v)return '';const d=new Date(v);return isNaN(d)?String(v):d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});}
+function ncell(asin){const n=NOTES[asin]||{};
+  const meta=n.note&&n.at?('saved '+fmtWhen(n.at)+(n.by?' by '+esc(n.by):'')):'';
+  return '<textarea class="noteinput" data-asin="'+esc(asin)+'" placeholder="Add note...">'+esc(n.note||'')+'</textarea><div class="notestat">'+meta+'</div>';}
+function saveNote(asin,val,statEl){const who=getWho();
+  if(statEl){statEl.textContent='Saving...';statEl.className='notestat saving';}
+  window.sb.from('notes').upsert({asin:asin,note:val,by:who,at:new Date().toISOString()})
+    .then(({error})=>{if(error)throw error;
+      NOTES[asin]={note:val,by:who,at:new Date().toISOString()};DIRTY.delete('n:'+asin);
+      if(statEl){statEl.textContent=val?'Saved':'Cleared';statEl.className='notestat saved';}})
+    .catch(()=>{if(statEl){statEl.textContent='Save failed, retry';statEl.className='notestat failed';}});}
+(function initWho(){const el=whoEl();if(el&&window.__FJ_USER__){el.value=(window.__FJ_USER__.split('@')[0]||'').replace(/^./,c=>c.toUpperCase());}})();
+function saveOverride(asin){
+  const patch={asin:asin,updated_by:getWho(),updated_at:new Date().toISOString()};
+  if(TAG_EDITS[asin]!=null)patch.tags=TAG_EDITS[asin];
+  if(COST_EDITS[asin]!=null)patch.cost=COST_EDITS[asin];
+  if(RESTOCK_EDITS[asin]!=null)patch.restock_target=RESTOCK_EDITS[asin];
+  window.sb.from('overrides').upsert(patch).then(({error})=>{if(error)console.warn('override save failed',error);else DIRTY.delete('o:'+asin);});
+}
+function bulkAddTag(){
+  const shown=filteredRows();
+  if(!shown.length){alert('No rows are shown - adjust the filters first.');return;}
+  const raw=prompt('Add a tag to all '+shown.length.toLocaleString()+' ASINs currently shown (existing tags are kept). e.g. winter');
+  if(!raw)return;
+  const tag=raw.trim().toLowerCase();
+  if(!tag)return;
+  const who=getWho(),now=new Date().toISOString(),patch=[];
+  shown.forEach(r=>{
+    const cur=effTags(r);
+    if(!cur.includes(tag)){cur.push(tag);const nv=cur.join(', ');TAG_EDITS[r.asin]=nv;DIRTY.add('o:'+r.asin);
+      const p={asin:r.asin,tags:nv,updated_by:who,updated_at:now};
+      if(COST_EDITS[r.asin]!=null)p.cost=COST_EDITS[r.asin];
+      patch.push(p);}
+  });
+  if(!patch.length){alert('Every shown ASIN already has "'+tag+'".');return;}
+  window.sb.from('overrides').upsert(patch).then(({error})=>{
+    if(error){alert('Bulk tag save failed - please try again.');}
+    else{patch.forEach(p=>DIRTY.delete('o:'+p.asin));}});
+  renderTagChips();render();
+  alert('Added "'+tag+'" to '+patch.length.toLocaleString()+' ASINs.');
+}
+
+/* ---- cost edits (in-page until database deploy) ---- */
+let COST_EDITS=Object.assign({},window.__FJ_COSTS__||{});
+
+/* ---- row selection + bulk edit ---- */
+const SELECTED=new Set();
+let _bstat='';
+function selectedRows(){return R.filter(r=>SELECTED.has(r.asin));}
+function syncSelAll(){
+  const sa=document.getElementById('selAll');if(!sa)return;
+  const shown=filteredRows(),nSel=shown.filter(r=>SELECTED.has(r.asin)).length;
+  sa.checked=shown.length>0&&nSel===shown.length;
+  sa.indeterminate=nSel>0&&nSel<shown.length;
+}
+function closeBpops(){document.querySelectorAll('.bpop').forEach(p=>p.remove());}
+function bulkPersistOverrides(rows){
+  const who=getWho(),now=new Date().toISOString();
+  const patch=rows.map(r=>{const p={asin:r.asin,updated_by:who,updated_at:now};
+    if(TAG_EDITS[r.asin]!=null)p.tags=TAG_EDITS[r.asin];
+    if(COST_EDITS[r.asin]!=null)p.cost=COST_EDITS[r.asin];
+    if(RESTOCK_EDITS[r.asin]!=null)p.restock_target=RESTOCK_EDITS[r.asin];
+    DIRTY.add('o:'+r.asin);return p;});
+  if(!patch.length)return;
+  window.sb.from('overrides').upsert(patch).then(({error})=>{if(error){alert('Bulk save failed - please try again.');}else{patch.forEach(p=>DIRTY.delete('o:'+p.asin));}});
+}
+function flashStat(msg){_bstat=msg;updateBulkBar();clearTimeout(window._bstatT);window._bstatT=setTimeout(()=>{_bstat='';updateBulkBar();},3500);}
+function bulkTag(tag,remove){
+  tag=String(tag||'').trim().toLowerCase();if(!tag)return;
+  const rows=selectedRows();if(!rows.length)return;
+  rows.forEach(r=>{let cur=effTags(r);
+    if(remove)cur=cur.filter(t=>t!==tag);else if(!cur.includes(tag))cur.push(tag);
+    TAG_EDITS[r.asin]=cur.join(', ');});
+  bulkPersistOverrides(rows);renderTagChips();render();
+  flashStat((remove?'Removed "':'Added "')+tag+(remove?'" from ':'" to ')+rows.length+' rows');
+}
+function bulkRestock(){
+  const rows=selectedRows();if(!rows.length)return;
+  const raw=prompt('Set restock target (days of cover) for '+rows.length+' selected rows. Leave blank to clear the override and use the default ('+TARGET_DAYS+'d).');
+  if(raw===null)return;const s=raw.trim();
+  if(s===''){rows.forEach(r=>delete RESTOCK_EDITS[r.asin]);}
+  else{const d=Number(s);if(!(d>=1&&d<=365)){alert('Enter a number of days between 1 and 365.');return;}rows.forEach(r=>RESTOCK_EDITS[r.asin]=d);}
+  bulkPersistOverrides(rows);computeRestock();render();
+  flashStat(s===''?'Cleared restock target on '+rows.length+' rows':'Restock target '+s+'d on '+rows.length+' rows');
+}
+function bulkCost(){
+  const rows=selectedRows();if(!rows.length)return;
+  const raw=prompt('Set unit cost ($) for '+rows.length+' selected rows:');
+  if(raw===null)return;const v=parseFloat(raw);
+  if(!(v>0)){alert('Enter a cost greater than 0.');return;}
+  rows.forEach(r=>{COST_EDITS[r.asin]=v;const asp=r.u30?r.sales/r.u30:null;r._gm=asp?Math.round((asp-v)/asp*1000)/1000:null;});
+  bulkPersistOverrides(rows);render();
+  flashStat('Unit cost $'+v.toFixed(2)+' on '+rows.length+' rows');
+}
+function bulkNote(){
+  const rows=selectedRows();if(!rows.length)return;
+  const raw=prompt('Set a note on '+rows.length+' selected rows (replaces any existing note on those rows):');
+  if(raw===null)return;const text=raw.trim();
+  const who=getWho(),now=new Date().toISOString();
+  rows.forEach(r=>{NOTES[r.asin]={note:text,by:who,at:now};DIRTY.add('n:'+r.asin);});
+  const patch=rows.map(r=>({asin:r.asin,note:text,by:who,at:now}));
+  window.sb.from('notes').upsert(patch).then(({error})=>{if(error){alert('Bulk note save failed.');}else{patch.forEach(p=>DIRTY.delete('n:'+p.asin));}});
+  render();
+  flashStat('Note set on '+rows.length+' rows');
+}
+function tagPickerPopup(btn,remove){
+  closeBpops();
+  const rows=selectedRows();
+  const pop=document.createElement('div');pop.className='bpop';
+  const h=document.createElement('div');h.className='bph';h.textContent=remove?'Remove a tag from selected':'Add a tag to selected';pop.appendChild(h);
+  const counts={};(remove?rows:R).forEach(r=>effTags(r).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const names=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  if(names.length){names.forEach(t=>{const c=document.createElement('span');c.className='bchip';c.textContent=t;
+    c.onclick=()=>{bulkTag(t,remove);};pop.appendChild(c);});}
+  else{const m=document.createElement('div');m.className='bempty';m.textContent=remove?'Selected rows have no tags.':'No tags yet - type one below.';pop.appendChild(m);}
+  if(!remove){const nw=document.createElement('div');nw.className='bnew';
+    const inp=document.createElement('input');inp.placeholder='new tag...';
+    const ok=document.createElement('button');ok.type='button';ok.textContent='Add';
+    const go=()=>{if(inp.value.trim())bulkTag(inp.value,false);};
+    ok.onclick=go;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();go();}};
+    nw.append(inp,ok);pop.appendChild(nw);setTimeout(()=>inp.focus(),0);}
+  btn.appendChild(pop);
+}
+function updateBulkBar(){
+  const bar=document.getElementById('bulkbar'),n=SELECTED.size;
+  if(!n){bar.hidden=true;bar.replaceChildren();return;}
+  bar.hidden=false;bar.replaceChildren();
+  const lbl=document.createElement('span');lbl.className='bsel';lbl.textContent=n.toLocaleString()+' selected';bar.appendChild(lbl);
+  const mkMenu=(txt,fn)=>{const b=document.createElement('button');b.className='bbtn';b.type='button';b.textContent=txt+' ▾';
+    b.onclick=e=>{e.stopPropagation();const open=b.querySelector('.bpop');closeBpops();if(!open)fn(b);};return b;};
+  const mkAct=(txt,fn)=>{const b=document.createElement('button');b.className='bbtn';b.type='button';b.textContent=txt;b.onclick=fn;return b;};
+  bar.appendChild(mkMenu('Add tag',(b)=>tagPickerPopup(b,false)));
+  bar.appendChild(mkMenu('Remove tag',(b)=>tagPickerPopup(b,true)));
+  bar.appendChild(mkAct('Set restock target',bulkRestock));
+  bar.appendChild(mkAct('Set cost',bulkCost));
+  bar.appendChild(mkAct('Set note',bulkNote));
+  const clr=document.createElement('button');clr.className='bclear';clr.type='button';clr.textContent='Clear selection';
+  clr.onclick=()=>{SELECTED.clear();render();};bar.appendChild(clr);
+  if(_bstat){const s=document.createElement('span');s.className='bstat';s.textContent='✓ '+_bstat;bar.appendChild(s);}
+}
+document.getElementById('tbl').addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='selAll'){const shown=filteredRows();if(t.checked)shown.forEach(r=>SELECTED.add(r.asin));else shown.forEach(r=>SELECTED.delete(r.asin));render();return;}
+  if(t.classList&&t.classList.contains('rowsel')){if(t.checked)SELECTED.add(t.dataset.asin);else SELECTED.delete(t.dataset.asin);const tr=t.closest('tr');if(tr)tr.classList.toggle('selrow',t.checked);syncSelAll();updateBulkBar();}
+});
+document.addEventListener('click',e=>{if(e.target.isConnected&&!e.target.closest('.bbtn'))closeBpops();});
+
+/* ---- table ---- */
+const dcell=v=>v==null||v===999?'<span class="muted">-</span>':(v<7?'<span class="daysbad">'+v+'</span>':(v<14?'<span class="dayswarn">'+v+'</span>':v));
+const rcell=r=>r==='AT_RISK'?'<span class="badge AT_RISK">AT RISK</span>':(r==='BUFFERED'?'<span class="badge BUFFERED">BUFFERED</span>':'<span class="RISKOK">ok</span>');
+let openTrend=null;
+function cellHTML(k,r){
+  const gmv=(r._gm!=null?r._gm:r.gm);
+  switch(k){
+    case 'sel': return '<td class="selc" data-c="sel"><input type="checkbox" class="rowsel" data-asin="'+esc(r.asin)+'"'+(SELECTED.has(r.asin)?' checked':'')+'></td>';
+    case 'img': return '<td class="imgc" data-c="img">'+(r.img?'<a href="https://www.amazon.com/dp/'+esc(r.asin)+'" target="_blank" rel="noopener"><img loading="lazy" src="'+esc(r.img)+'" alt=""></a>':'')+'</td>';
+    case 'tier': return '<td data-c="tier"><span class="badge '+r.tier+'">'+tierLabel(r.tier)+'</span>'+(r.disc?' <span title="Discontinued (vendor DISC) - sell through existing stock, no reorder" style="display:inline-block;padding:1px 5px;border-radius:5px;background:#efe3d0;color:#8a5a00;font-size:9.5px;font-weight:800;letter-spacing:.3px;vertical-align:middle">DISC</span>':'')+'</td>';
+    case 'parent': return '<td class="asin" data-c="parent">'+(r.parent?'<a href="https://www.amazon.com/dp/'+esc(r.parent)+'" target="_blank" rel="noopener" style="color:#345d9d;text-decoration:none">'+esc(r.parent)+'</a>':'<span class="muted">-</span>')+'</td>';
+    case 'asin': return '<td class="asin" data-c="asin">'+esc(r.asin)+'</td>';
+    case 'name': return '<td class="name" data-c="name" title="'+esc(r.name)+'"><div class="nametrunc">'+esc(r.name)+'</div></td>';
+    case 'sku': {
+      // both channel SKUs in the one column; rows from a sync before the FBA/FBM split only have r.sku
+      const a=r.skuFba||'',b=r.skuFbm||'',one=(!a&&!b)?(r.sku||''):'';
+      const ln=(t,v)=>'<div style="overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:27px;font-size:9px;font-weight:800;letter-spacing:.3px;color:'+(t==='FBA'?'#345d9d':'#8a5a00')+'">'+t+'</span>'+esc(v)+'</div>';
+      return '<td data-c="sku" style="max-width:190px;overflow:hidden;white-space:nowrap;font-size:11.5px;color:#5b6678;line-height:1.5" title="'+esc(r.skuList||r.sku||'')+'">'
+        +(a||b?(a?ln('FBA',a):'')+(b?ln('FBM',b):''):(one?esc(one):'<span class="muted">-</span>'))+'</td>';
+    }
+    case 'parentSku': return '<td data-c="parentSku" style="font-size:11.5px;color:#5b6678;white-space:nowrap" title="Parent SKU'+(r.parentSku?' - click to group its variations':'')+'">'+(r.parentSku?'<span class="pskulink" data-psku="'+esc(r.parentSku)+'" style="color:#345d9d;cursor:pointer">'+esc(r.parentSku)+'</span>':'<span class="muted">-</span>')+'</td>';
+    case 'color': return '<td data-c="color" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#5b6678" title="'+esc(r.color||'')+'">'+(r.color?esc(r.color):'<span class="muted">-</span>')+'</td>';
+    case 'season': return '<td data-c="season">'+seasonChip(r.season)+'</td>';
+    case 'tags': return '<td data-c="tags"><input class="tagin'+(TAG_EDITS[r.asin]?' edited':'')+'" data-asin="'+esc(r.asin)+'" value="'+esc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||''))+'" placeholder="best, ..."></td>';
+    case 'kw': return '<td data-c="kw" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:#5b6678">'+esc(r.kw||'')+'</td>';
+    case 'category': return '<td data-c="category" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:#5b6678" title="'+esc(r.category||'')+'">'+esc(r.category||'')+'</td>';
+    case 'price': return '<td class="r" data-c="price">'+(r.price!=null?'$'+r.price.toFixed(2):'<span class="muted">-</span>')+'</td>';
+    case 'cost': return '<td class="r" data-c="cost"><input class="costin'+(COST_EDITS[r.asin]!=null?' edited':'')+'" data-asin="'+esc(r.asin)+'" value="'+(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost!=null?r.cost.toFixed(2):''))+'" inputmode="decimal"></td>';
+    case 'gm': return '<td class="r" data-c="gm">'+(gmv!=null?Math.round(gmv*100)+'%':'<span class="muted">-</span>')+'</td>';
+    case 'u1': return '<td class="r" data-c="u1">'+(r.u1?'<b>'+r.u1.toLocaleString()+'</b>':'<span class="muted">0</span>')+'</td>';
+    case 'u7': return '<td class="r" data-c="u7">'+r.u7.toLocaleString()+'</td>';
+    case 'u30': return '<td class="r" data-c="u30">'+r.u30.toLocaleString()+'</td>';
+    case 'u365': return '<td class="r" data-c="u365">'+(r.u365?r.u365.toLocaleString():'<span class="muted">-</span>')+'</td>';
+    case 'sales': return '<td class="r" data-c="sales">'+money(r.sales)+'</td>';
+    case 'daily': return '<td class="r" data-c="daily">'+r.daily+'</td>';
+    case 'inv': return '<td class="r" data-c="inv">'+r.inv.toLocaleString()+'</td>';
+    case 'fbaDays': return '<td class="r" data-c="fbaDays">'+dcell(r.fbaDays)+'</td>';
+    case 'fbm': return '<td class="r" data-c="fbm">'+r.fbm.toLocaleString()+'</td>';
+    case 'inbound': return '<td class="r" data-c="inbound">'+(r.inbound?'<b>'+r.inbound.toLocaleString()+'</b>':'<span class="muted">-</span>')+'</td>';
+    case 'combDays': return '<td class="r" data-c="combDays">'+dcell(r.combDays)+'</td>';
+    case 'restock': {
+      if(r.disc)return '<td class="r" data-c="restock"><span class="muted" title="Discontinued - no reorder">-</span></td>';
+      const sm=r._smult||1, mark=sm>1.02?'<sup style="color:#e0902f;font-size:8px">&#9650;</sup>':sm<0.98?'<sup style="color:#7a8499;font-size:8px">&#9660;</sup>':'';
+      const tip=sm!==1?' title="Seasonal forecast &times;'+sm.toFixed(2)+' vs current velocity"':'';
+      return '<td class="r" data-c="restock"'+tip+'>'+(r._restock>0?'<b style="color:#1b6fd4">'+r._restock.toLocaleString()+'</b>'+mark:'<span class="muted">-</span>')+'</td>';
+    }
+    case 'risk': return '<td data-c="risk">'+rcell(r.risk)+'</td>';
+    case 'trend': return '<td data-c="trend">'+sparkSVG(r)+'<button class="trbtn'+(openTrend===r.asin?' open':'')+'" data-asin="'+esc(r.asin)+'" type="button">&#9660;</button></td>';
+    case 'notes': return '<td class="notes" data-c="notes">'+ncell(r.asin)+'</td>';
+  }
+  return '';
+}
+function trendSVG(r){
+  const vals=r.trend||[];
+  if(!vals.length||!MONTHS.length) return '<span class="muted">Monthly trend loads with the next data refresh.</span>';
+  const w=Math.min(1120,Math.max(560,innerWidth-140)),h=138,m={t:28,b:24,l:10,r:10};
+  const max=Math.max(...vals,1);
+  const band=(w-m.l-m.r)/vals.length,bw=Math.min(38,band*.62);
+  let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+  // legend: one swatch per year present
+  const years=[...new Set(MONTHS.map(x=>String(x).slice(0,4)))];
+  let lx=m.l;
+  years.forEach(y=>{s+=`<rect x="${lx}" y="6" width="10" height="10" rx="2" fill="${yearColor(y)}"></rect><text x="${lx+14}" y="15" font-size="11" font-weight="700" fill="#5b6678">${y}</text>`;lx+=48;});
+  vals.forEach((v,i)=>{
+    const bh=Math.max(v>0?2:0,(h-m.t-m.b)*v/max),bx=m.l+band*i+(band-bw)/2,by=h-m.b-bh;
+    // dashed divider at each January (year boundary)
+    if(i>0&&MONTHS[i]&&MONTHS[i].slice(5)==='01'){const dx=(m.l+band*i).toFixed(1);s+=`<line x1="${dx}" y1="${m.t-6}" x2="${dx}" y2="${h-m.b}" stroke="#dbe1ea" stroke-width="1" stroke-dasharray="2 3"></line>`;}
+    s+=`<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${yearColor(MONTHS[i])}"${i===vals.length-1?' stroke="#0f3d78" stroke-width="1.2"':''}></rect>`;
+    if(band>=26||i%2===1||i===vals.length-1)s+=`<text x="${(bx+bw/2).toFixed(1)}" y="${(by-4).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1b2333">${v>=1000?Math.round(v/100)/10+'K':v}</text>`;
+    s+=`<text x="${(bx+bw/2).toFixed(1)}" y="${h-9}" text-anchor="middle" font-size="9" fill="#7a8499">${MONTHS[i]?MONTHS[i].slice(5):''}</text>`;
+  });
+  s+='</svg>';
+  return s;
+}
+// YoY caption: this-year vs same-month-last-year units (matched months) + the seasonal factor applied
+function yoyText(r){
+  const t=r.trend||[]; if(t.length<13||!MONTHS.length) return '';
+  let ty=0,ly=0;
+  for(let i=12;i<t.length;i++){ty+=t[i]||0;ly+=t[i-12]||0;}
+  const sm=(r._smult!=null?r._smult:seasonalMult(r)); let parts=[];
+  if(ly>0){const pct=Math.round((ty/ly-1)*100);parts.push('YoY '+(pct>=0?'+':'')+pct+'% ('+ty.toLocaleString()+' vs '+ly.toLocaleString()+' units, matched months)');}
+  if(sm!==1)parts.push('seasonal restock '+(sm>1?'&#9650;':'&#9660;')+' &times;'+sm.toFixed(2));
+  return parts.length?'<span style="font-size:11.5px;color:#5b6678"> &mdash; '+parts.join(' &middot; ')+'</span>':'';
+}
+function filteredRows(){
+  let rows=baseRows();
+  if(curFilter==='FLAGGED')rows=rows.filter(r=>r.tier!=='OK');
+  else if(curFilter==='AT RISK')rows=rows.filter(r=>r.risk==='AT_RISK');
+  else if(curFilter!=='ALL')rows=rows.filter(r=>r.tier===curFilter);
+  if(quick){const fn=QUICK.find(q=>q[0]===quick)[2];rows=rows.filter(fn);}
+  if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
+  if(CONDS.length)rows=rows.filter(r=>CONDS.every(c=>condTest(r,c)));
+  searchMiss=[];
+  const terms=searchTerms(curSearch);
+  if(terms.length){
+    const hit=new Set();
+    rows=rows.filter(r=>{
+      const hay=(r.name+' '+r.asin+' '+(r.parent||'')+' '+(r.parentSku||'')+' '+(r.color||'')+' '+(r.season||'')+' '+(r.disc?'disc discontinued':'')+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase();
+      let ok=false;for(const t of terms){if(hay.includes(t)){ok=true;hit.add(t);}}
+      return ok;});
+    if(terms.length>1)searchMiss=terms.filter(t=>!hit.has(t));
+  }
+  rows.sort((a,b)=>{let x,y;
+    if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
+    else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
+    else if(sortK==='tags'){x=effTags(a).join(',')||'￿';y=effTags(b).join(',')||'￿';return sortAsc?(x<y?-1:1):(x>y?-1:1)}
+    else if(sortK==='name'||sortK==='asin'||sortK==='parent'||sortK==='kw'||sortK==='category'||sortK==='sku'||sortK==='parentSku'||sortK==='color'||sortK==='season'){x=(a[sortK]||'￿').toLowerCase();y=(b[sortK]||'￿').toLowerCase();return sortAsc?(x<y?-1:1):(x>y?-1:1)}
+    else{const kk=sortK==='restock'?'_restock':sortK;x=a[kk]==null?1e9:a[kk];y=b[kk]==null?1e9:b[kk]}
+    return sortAsc?x-y:y-x;});
+  return rows;
+}
+/* header drag-to-reorder + drag-edge-to-resize */
+let _dragK=null,_rzEnd=0,_rzOn=false;
+function wireHeader(){
+  const ths=[...document.querySelectorAll('#hrow th')];
+  const clear=()=>ths.forEach(t=>t.classList.remove('dropL','dropR','dragging'));
+  ths.forEach(th=>{const k=th.dataset.k;if(k==='sel')return;
+    th.ondragstart=e=>{if(_rzOn){e.preventDefault();return;}
+      _dragK=k;th.classList.add('dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',k);}catch(_){}};
+    th.ondragend=()=>{_dragK=null;clear();};
+    th.ondragover=e=>{if(!_dragK||_dragK===k)return;e.preventDefault();e.dataTransfer.dropEffect='move';
+      const b=th.getBoundingClientRect(),after=e.clientX>b.left+b.width/2;
+      th.classList.toggle('dropR',after);th.classList.toggle('dropL',!after);};
+    th.ondragleave=()=>th.classList.remove('dropL','dropR');
+    th.ondrop=e=>{e.preventDefault();const src=_dragK;_dragK=null;if(!src||src===k)return;
+      const b=th.getBoundingClientRect();moveCol(src,k,e.clientX>b.left+b.width/2);renderColPop();render();};
+    const rz=th.querySelector('.rz');if(!rz)return;
+    rz.onclick=e=>e.stopPropagation();
+    rz.ondblclick=e=>{e.stopPropagation();delete colW[k];saveCols();applyColW();stickify();};
+    rz.onmousedown=e=>{e.preventDefault();e.stopPropagation();
+      _rzOn=true;rz.classList.add('on');const x0=e.clientX,w0=th.offsetWidth;let raf=0;
+      const mv=ev=>{colW[k]=Math.max(40,Math.min(900,w0+ev.clientX-x0));
+        if(!raf)raf=requestAnimationFrame(()=>{raf=0;applyColW();stickify();});};
+      const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+        _rzOn=false;_rzEnd=Date.now();rz.classList.remove('on');saveCols();applyColW();stickify();};
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);};
+  });
+}
+function render(){
+  const shown=orderedCols().filter(c=>visible[c[0]]);
+  document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
+    k==='sel'?'<th data-k="sel" class="selc"><input type="checkbox" id="selAll" title="Select all shown rows"></th>'
+    :`<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','parent','asin','sku','parentSku','color','season','risk','trend','notes'].includes(k)?'':'r'}" draggable="true">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}<span class="rz" draggable="false"></span></th>`).join('');
+  wireHeader();
+  let rows=filteredRows();
+  const totalRows=rows.length,MAXR=500;
+  const cnt=document.getElementById('count');
+  const anyFilter=curFilter!=='FLAGGED'||quick||curTag||curSearch||CONDS.length;
+  cnt.innerHTML=esc(totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':''))
+    +(searchMiss.length?' <span style="color:#a4161a;font-weight:600" title="'+esc(searchMiss.join(', '))+'">&middot; '+searchMiss.length+' of your search terms not found here: '+esc(searchMiss.slice(0,8).join(', '))+(searchMiss.length>8?' ...':'')+'</span>':'')
+    +(anyFilter?' <button id="clearAll" type="button" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:0 4px">&#10005; Clear all filters</button>':'');
+  const ca=document.getElementById('clearAll');if(ca)ca.onclick=resetAll;
+  if(totalRows>MAXR)rows=rows.slice(0,MAXR);
+  let html='';
+  if(!rows.length){
+    const nc=shown.length;
+    html='<tr><td colspan="'+nc+'" style="text-align:center;padding:36px;color:#8b95a7;font-size:13px">No products match the current filters.'
+      +' <button type="button" id="clearEmpty" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:13px;font-weight:600">Clear all filters</button></td></tr>';
+  }
+  let ri=0;
+  for(const r of rows){
+    html+='<tr class="mainrow'+((ri++)%2?' alt':'')+(SELECTED.has(r.asin)?' selrow':'')+'">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
+    if(openTrend===r.asin)html+='<tr class="trendrow"><td colspan="'+shown.length+'"><b style="font-size:12px">'+esc(r.name.slice(0,80))+'</b> - monthly units ordered, Jan 2025 onward'+yoyText(r)+'<br>'+trendSVG(r)+'</td></tr>';
+  }
+  document.getElementById('tb').innerHTML=html;
+  const ce=document.getElementById('clearEmpty');if(ce)ce.onclick=resetAll;
+  stickify();
+  saveState();
+  syncSelAll();updateBulkBar();
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
+  document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
+    if(['sel','img','trend','notes'].includes(k))return;
+    if(Date.now()-_rzEnd<350)return; // the click that ends a resize drag is not a sort
+    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=['tier','risk','fbaDays','combDays','inv','fbm','name','asin','parent','tags','kw','category'].includes(k);}
+    render();});
+  renderTagChips();
+}
+document.getElementById('tb').addEventListener('click',e=>{
+  const b=e.target.closest('.trbtn');
+  if(b){openTrend=openTrend===b.dataset.asin?null:b.dataset.asin;render();return;}
+  const ps=e.target.closest('.pskulink');
+  if(ps){const v=ps.dataset.psku||'';const s=document.getElementById('search');s.value=v;curSearch=v.toLowerCase();render();}
+});
+document.getElementById('legendBtn').onclick=()=>{
+  const lb=document.getElementById('legendBox');
+  lb.style.display=lb.style.display==='none'?'block':'none';
+};
+document.getElementById('tb').addEventListener('input',e=>{
+  const t=e.target;
+  if(t.classList.contains('tagin')){
+    TAG_EDITS[t.dataset.asin]=t.value.trim();DIRTY.add('o:'+t.dataset.asin);
+    t.classList.add('edited');
+    clearTimeout(window._tagTimer);window._tagTimer=setTimeout(renderTagChips,600);
+    clearTimeout(window._tagSave);window._tagSave=setTimeout(()=>saveOverride(t.dataset.asin),900);
+  }
+  if(t.classList.contains('costin')){
+    const v=parseFloat(t.value);
+    const r=R.find(x=>x.asin===t.dataset.asin);
+    if(r&&!isNaN(v)&&v>0){COST_EDITS[r.asin]=v;DIRTY.add('o:'+r.asin);
+      const asp=r.u30?r.sales/r.u30:null;
+      r._gm=asp?Math.round((asp-v)/asp*1000)/1000:null;
+      t.classList.add('edited');
+      const gmTd=t.closest('tr').querySelector('[data-c="gm"]');
+      if(gmTd)gmTd.innerHTML=r._gm!=null?Math.round(r._gm*100)+'%':'-';
+      clearTimeout(window._costSave);window._costSave=setTimeout(()=>saveOverride(r.asin),900);
+    }
+  }
+  if(t.classList.contains('noteinput')){
+    const asin=t.dataset.asin,stat=t.parentNode.querySelector('.notestat');
+    DIRTY.add('n:'+asin);
+    clearTimeout(NOTE_TIMERS[asin]);
+    if(stat){stat.textContent='Typing...';stat.className='notestat';}
+    NOTE_TIMERS[asin]=setTimeout(()=>saveNote(asin,t.value,stat),900);
+  }
+});
+document.getElementById('tb').addEventListener('focusout',e=>{
+  const t=e.target;
+  if(t.classList&&t.classList.contains('noteinput')){
+    const asin=t.dataset.asin,stat=t.parentNode.querySelector('.notestat');
+    clearTimeout(NOTE_TIMERS[asin]);saveNote(asin,t.value,stat);
+  }
+});
+document.getElementById('foot').innerHTML=
+  `<b>Sales windows:</b> 1-day = ${esc(S.dayDate)} (Amazon sales reports lag ~48h); 7/30-day and 12-Mo = units ordered across ALL channels (FBA + FBM). `+
+  `<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
+  `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
+  `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs are the Sellery Cost field (includes the bundle/adder logic); prices, images & color live from Amazon. `+
+  `<b>Season</b> comes from the Xnurta product line (Winter/Summer/Bridal/Other) and drives the seasonal restock factor. <b>DISC</b> ASINs (vendor discontinued) are shown but never get a reorder suggestion. `+
+  `<b>Tags</b> (e.g. "best") are editable labels shared with the whole team; the Tagged quick view and search both pick them up. Keyword & Category columns (from Sellery) are available via the Columns menu and searchable - e.g. type "golf" to pull every golf item. `+
+  `"Winter" quick view uses product titles/keywords + Sellery CAT codes - refine once David supplies the code legend. Notes save live for the whole team. `+
+  `<b>Restock Qty</b> = target days x <b>seasonally-adjusted</b> units/day - FBA on hand - inbound. The forecast reads last year's shape (units in the upcoming window vs the recent one) and scales up/down (&#9650;/&#9660; on the number); a manual season factor or a per-ASIN target overrides it. Expand any row's <b>Trend</b> to see monthly units back to Jan 2025 with 2025 vs 2026 colored for year-over-year comparison.`;
+
+/* ---- reset + remembered state ---- */
+function resetAll(){
+  curFilter='FLAGGED';quick=null;curTag=null;curSearch='';CONDS=[];condDraft=[];activeView=null;
+  document.getElementById('search').value='';
+  syncFiltBtn();renderTierChips();renderQuickBtns();renderViews();render();
+}
+let _stateReady=false;
+function saveState(){
+  if(!_stateReady)return;
+  try{localStorage.setItem('fj_state',JSON.stringify({scope:curScope,tier:curFilter,quick:quick,tag:curTag,
+    search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc}));}catch(e){}
+}
+(function restoreState(){
+  try{
+    const s=JSON.parse(localStorage.getItem('fj_state')||'null');
+    if(s){
+      if(s.scope==='all'&&R.some(r=>r.top===false))curScope='all';
+      if(s.tier)curFilter=s.tier;
+      quick=s.quick||null;curTag=s.tag||null;
+      curSearch=s.search||'';document.getElementById('search').value=curSearch;
+      CONDS=Array.isArray(s.conds)?s.conds:[];
+      if(s.sortK){sortK=s.sortK;sortAsc=!!s.sortAsc;}
+      syncFiltBtn();renderScope();renderStats();renderTierChips();renderQuickBtns();
+    }
+  }catch(e){}
+  _stateReady=true;
+})();
+
+/* ---- restock target control (in the flags legend) ---- */
+(function tgtControl(){
+  const lb=document.getElementById('legendBox');
+  if(!lb)return;
+  const d=document.createElement('div');
+  d.innerHTML='<b>Restock target:</b> keep <input id="tgtDays" type="number" min="7" max="365" step="1" value="'+TARGET_DAYS+'" style="width:58px;border:1px solid #d6dce6;border-radius:6px;padding:3px 6px;font-size:12.5px;text-align:right"> days of FBA cover - drives the <b>Restock Qty</b> column (send-in suggestion per ASIN).';
+  lb.appendChild(d);
+  document.getElementById('tgtDays').addEventListener('change',e=>{
+    const v=Number(e.target.value);
+    if(v>=7&&v<=365){TARGET_DAYS=v;try{localStorage.setItem('fj_target',String(v));}catch(err){}
+      computeRestock();render();}
+  });
+})();
+
+/* ---- seasonal restock factors (in the flags legend) ---- */
+function saveSeasonFactors(){
+  try{localStorage.setItem('fj_seasonf',JSON.stringify(SEASON_FACTORS));}catch(e){}
+  try{if(window.sb)window.sb.from('settings').upsert({key:'season_factors',data:SEASON_FACTORS,updated_by:(window.__FJ_USER__||''),updated_at:new Date().toISOString()},{onConflict:'key'}).then(r=>{if(r&&r.error)console.log('season factors not shared (settings table pending):',r.error.message);});}catch(e){}
+}
+(function seasonControl(){
+  const lb=document.getElementById('legendBox');
+  if(!lb)return;
+  const d=document.createElement('div');d.style.marginTop='4px';
+  const inp=k=>'<label style="display:inline-flex;align-items:center;gap:3px;margin-right:10px">'+SEASON_META[k][0]+' &times;<input class="seasonf" data-k="'+k+'" type="number" min="0.25" max="4" step="0.25" value="'+SEASON_FACTORS[k]+'" style="width:52px;border:1px solid #d6dce6;border-radius:6px;padding:3px 6px;font-size:12.5px;text-align:right"></label>';
+  d.innerHTML='<b>Seasonal factors:</b> multiply the restock target by season - e.g. Winter &times;1.5 keeps 50% more cover heading into the season. Leave a season at &times;1 and the forecast falls back to the automatic year-over-year ramp for those items. '+
+    Object.keys(SEASON_DEFAULTS).map(inp).join('')+
+    '<span style="color:#7a8499;font-size:11.5px">(a per-ASIN restock target still overrides this)</span>';
+  lb.appendChild(d);
+  d.querySelectorAll('.seasonf').forEach(el=>el.addEventListener('change',e=>{
+    const k=e.target.dataset.k,v=Number(e.target.value);
+    if(v>=0.25&&v<=4){SEASON_FACTORS[k]=v;saveSeasonFactors();computeRestock();render();}
+    else{e.target.value=SEASON_FACTORS[k];}
+  }));
+})();
+render();
+</script>
+<script src="supabase.min.js"></script>
+<script>
+const sb = supabase.createClient('https://ycpuazaitviokvdogvfe.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljcHVhemFpdHZpb2t2ZG9ndmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MzM5OTgsImV4cCI6MjEwMzUwOTk5OH0.4B2VqUuNv7VN49fzK0iFSstBvCh0ZGYEMJqg7IHeziA');
+window.sb = sb;
+async function fetchAll(tries){
+  for (let i = 0; i < tries; i++) {
+    try {
+      const [snap, ov, nts] = await Promise.all([
+        sb.from('dashboard_snapshot').select('data,updated_at').eq('id', 1).single(),
+        sb.from('overrides').select('*'),
+        sb.from('notes').select('*'),
+      ]);
+      if (!snap.error) return [snap, ov, nts];
+    } catch (e) { /* network hiccup - retry */ }
+    await new Promise(r => setTimeout(r, 1200 * (i + 1)));
+  }
+  return null;
+}
+async function boot(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { document.getElementById('loginOverlay').style.display='flex'; return; }
+  document.getElementById('liErr').textContent = 'Loading data...';
+  const res = await fetchAll(4);
+  if (!res) { document.getElementById('liErr').textContent = 'Data load failed - check connection and retry'; return; }
+  const [snap, ov, nts] = res;
+  window.__FJ_DATA__ = snap.data.data;
+  window.__FJ_UPDATED__ = snap.data.updated_at;
+  window.__FJ_TAGS__ = {}; window.__FJ_COSTS__ = {}; window.__FJ_NOTES__ = {}; window.__FJ_RTARGET__ = {};
+  (ov.data || []).forEach(o => {
+    if (o.tags != null && o.tags !== '') window.__FJ_TAGS__[o.asin] = o.tags;
+    if (o.cost != null) window.__FJ_COSTS__[o.asin] = Number(o.cost);
+    if (o.restock_target != null) window.__FJ_RTARGET__[o.asin] = Number(o.restock_target);
+  });
+  (nts.data || []).forEach(n => window.__FJ_NOTES__[n.asin] = { note: n.note, by: n.by, at: n.at });
+  window.__FJ_USER__ = session.user.email;
+  // team-shared seasonal restock factors (settings table; tolerate its absence)
+  window.__FJ_SEASONF__ = null;
+  try {
+    const st = await sb.from('settings').select('data').eq('key', 'season_factors').maybeSingle();
+    if (st && !st.error && st.data && st.data.data) window.__FJ_SEASONF__ = st.data.data;
+  } catch (e) { /* settings table not created yet - fall back to local defaults */ }
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appwrap').style.visibility = 'visible';
+  new Function(document.getElementById('mainjs').textContent)();
+}
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  document.getElementById('liErr').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('liEmail').value.trim(),
+    password: document.getElementById('liPass').value });
+  if (error) { document.getElementById('liErr').textContent = 'Wrong email or password'; return; }
+  boot();
+});
+const pwOv = document.getElementById('pwOverlay');
+document.getElementById('chpw').addEventListener('click', e => {
+  e.preventDefault();
+  document.getElementById('pw1').value = ''; document.getElementById('pw2').value = '';
+  document.getElementById('pwErr').textContent = '';
+  pwOv.style.display = 'flex';
+  document.getElementById('pw1').focus();
+});
+document.getElementById('pwCancel').addEventListener('click', () => pwOv.style.display = 'none');
+document.getElementById('pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const p1 = document.getElementById('pw1').value, p2 = document.getElementById('pw2').value;
+  const err = document.getElementById('pwErr');
+  if (p1.length < 8) { err.textContent = 'Use at least 8 characters.'; return; }
+  if (p1 !== p2) { err.textContent = 'The two passwords do not match.'; return; }
+  err.textContent = 'Saving...';
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) { err.textContent = error.message || 'Could not update the password.'; return; }
+  pwOv.style.display = 'none';
+  alert('Password updated - use the new one next time you sign in.');
+});
+document.getElementById('signout').addEventListener('click', async e => {
+  e.preventDefault(); await sb.auth.signOut(); location.reload();
+});
+boot();
+</script></body></html>
