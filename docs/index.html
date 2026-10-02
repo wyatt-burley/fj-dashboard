@@ -50,8 +50,7 @@ input.who{border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:
 .colwrap{position:relative;flex:none}
 td.stick,th.stick{position:sticky;background:#fff;z-index:3}
 th.stick{z-index:6;background:#fafbfd}
-td.stick-last,th.stick-last{box-shadow:inset -1px 0 0 #e6eaf1}
-tr.mainrow:hover td.stick{background:#f8faff}
+td.stick-last,th.stick-last{border-right:2px solid #c3ccda}
 .filtpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:14px 16px;display:none;min-width:520px}
 .filtpop .frow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .filtpop select,.filtpop input{border:1px solid #d6dce6;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit;background:#fff}
@@ -69,7 +68,8 @@ tr.mainrow:hover td.stick{background:#f8faff}
 .vchip .vx:hover{color:#a4161a}
 .tablewrap{background:#fff;border:1px solid #e6eaf1;border-radius:10px;overflow:auto;max-height:74vh;overscroll-behavior:contain}
 table{border-collapse:separate;border-spacing:0;width:100%}
-th,td{text-align:left;padding:8px 9px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+th,td{text-align:left;padding:8px 9px;border-right:1px solid #e1e6ee;white-space:nowrap}
+th{border-bottom:1px solid #d5dbe6}
 th{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#7a8499;cursor:pointer;user-select:none;background:#fafbfd;position:sticky;top:0;z-index:5}
 th.r,td.r{text-align:right}
 td.name{color:#2c3445;font-size:12.5px;line-height:1.35}
@@ -92,7 +92,16 @@ td.selc,th.selc{width:30px;min-width:30px;text-align:center;padding:6px 4px}
 .bpop .bnew button{border:none;background:#1b2333;color:#fff;border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer}
 .bpop .bempty{font-size:12px;color:#8b95a7;padding:4px 2px}
 td.asin{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#5b6678}
-tr.mainrow:hover td{background:#f8faff}
+tr.mainrow.alt td,tr.mainrow.alt td.stick{background:#f2f4f8}
+tr.mainrow.selrow td,tr.mainrow.selrow td.stick{background:#d3e2fb}
+tr.mainrow:hover td,tr.mainrow:hover td.stick{background:#c9dbf7}
+th .rz{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize}
+th .rz:hover,th .rz.on{background:#1b6fd4;opacity:.5}
+th.dragging{opacity:.4}
+th.dropL{box-shadow:inset 3px 0 0 #1b6fd4}
+th.dropR{box-shadow:inset -3px 0 0 #1b6fd4}
+.colpop .colreset{display:block;margin-top:8px;border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:2px 0;break-inside:avoid}
+.colpop .colhint{font-size:11px;color:#8b95a7;margin-top:6px;white-space:normal;break-inside:avoid}
 td.imgc{padding:4px 6px}
 td.imgc a{display:block;width:46px;height:46px;border-radius:6px;overflow:hidden;border:1px solid #e6eaf1;background:#fff}
 td.imgc img{width:100%;height:100%;object-fit:contain;display:block}
@@ -182,7 +191,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
 <div class="quickrow" id="scoperow"></div>
 <div class="toolbar">
   <div class="filters" id="filters"></div>
-  <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword...">
+  <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword - or paste a list of ASINs/SKUs" title="Paste several ASINs or SKUs (one per line, or separated by commas) to find them all at once">
   <input class="who" id="whoami" placeholder="Your name (for notes)">
   <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
   <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
@@ -313,7 +322,7 @@ function renderStats(){
 /* ---- columns ---- */
 const COLS=[
   ['sel','',1],['img','Image',1],['tier','FBA Tier',1],['parent','Parent ASIN',1],['asin','ASIN',1],['name','Product',1],
-  ['sku','SKU',0],['parentSku','Parent SKU',1],['color','Color',1],['season','Season',1],
+  ['sku','SKU',1],['parentSku','Parent SKU',1],['color','Color',1],['season','Season',1],
   ['tags','Tags',1],['kw','Keyword',0],['category','Category',0],
   ['price','Price',1],['cost','Unit Cost',1],['gm','GM %',1],
   ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
@@ -323,16 +332,53 @@ const COLS=[
 let visible={};COLS.forEach(c=>visible[c[0]]=!!c[2]);
 try{const s=localStorage.getItem('fj_cols');if(s)visible=Object.assign(visible,JSON.parse(s));}catch(e){}
 visible.sel=true; // selection column always visible
+/* per-user column order + widths (this browser; also captured in saved views) */
+const COLKEYS=COLS.map(c=>c[0]);
+let colOrder=[],colW={};
+try{const o=JSON.parse(localStorage.getItem('fj_colorder')||'[]');if(Array.isArray(o))colOrder=o;
+  const w=JSON.parse(localStorage.getItem('fj_colw')||'{}');if(w&&typeof w==='object')colW=w;}catch(e){}
+function orderedCols(){
+  const by={};COLS.forEach(c=>by[c[0]]=c);
+  const keys=['sel'];
+  colOrder.forEach(k=>{if(by[k]&&!keys.includes(k))keys.push(k);});
+  // columns not in the saved order (e.g. added in a later release) slot in after their default neighbour
+  COLS.forEach((c,i)=>{if(keys.includes(c[0]))return;
+    const prev=i>0?keys.indexOf(COLS[i-1][0]):-1;keys.splice(prev+1,0,c[0]);});
+  return keys.map(k=>by[k]);
+}
+function saveCols(){try{localStorage.setItem('fj_cols',JSON.stringify(visible));
+  localStorage.setItem('fj_colorder',JSON.stringify(colOrder));localStorage.setItem('fj_colw',JSON.stringify(colW));}catch(e){}}
+function moveCol(k,targetK,after){
+  if(k==='sel'||targetK==='sel'||k===targetK)return;
+  const keys=orderedCols().map(c=>c[0]).filter(x=>x!=='sel'&&x!==k);
+  const i=keys.indexOf(targetK);if(i<0)return;
+  keys.splice(after?i+1:i,0,k);colOrder=keys;saveCols();
+}
+function applyColW(){
+  let st=document.getElementById('colwStyle');
+  if(!st){st=document.createElement('style');st.id='colwStyle';document.head.appendChild(st);}
+  st.textContent=Object.keys(colW).filter(k=>COLKEYS.includes(k)&&k!=='sel'&&colW[k]>0).map(k=>{const w=Math.round(colW[k]);
+    return '#hrow th[data-k="'+k+'"],#tb td[data-c="'+k+'"]{width:'+w+'px!important;min-width:'+w+'px!important;max-width:'+w+'px!important;overflow:hidden;text-overflow:ellipsis}'
+      +'#tb td[data-c="'+k+'"] .nametrunc{max-width:none}'
+      +'#tb td[data-c="'+k+'"] input,#tb td[data-c="'+k+'"] textarea{width:100%;box-sizing:border-box}';}).join('\n');
+}
+applyColW();
+function resetColLayout(){colOrder=[];colW={};saveCols();applyColW();renderColPop();render();}
 const colPop=document.getElementById('colPop');
 function renderColPop(){
   colPop.replaceChildren();
-  COLS.forEach(([k,label])=>{
+  orderedCols().forEach(([k,label])=>{
     if(k==='sel')return; // selection column is always on, not user-hideable
     const l=document.createElement('label');
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!visible[k];
-    cb.addEventListener('change',()=>{visible[k]=cb.checked;try{localStorage.setItem('fj_cols',JSON.stringify(visible));}catch(e){};render();});
+    cb.addEventListener('change',()=>{visible[k]=cb.checked;saveCols();render();});
     l.append(cb,document.createTextNode(' '+label));colPop.appendChild(l);
   });
+  const hint=document.createElement('div');hint.className='colhint';
+  hint.textContent='Drag a column header to move it. Drag its right edge to resize (double-click the edge to reset).';
+  colPop.appendChild(hint);
+  const rb=document.createElement('button');rb.type='button';rb.className='colreset';rb.textContent='Reset column order & widths';
+  rb.onclick=resetColLayout;colPop.appendChild(rb);
 }
 renderColPop();
 document.getElementById('colBtn').onclick=e=>{const fp=document.getElementById('filtPop');if(fp)fp.style.display='none';colPop.style.display=colPop.style.display==='block'?'none':'block';e.stopPropagation();};
@@ -387,6 +433,26 @@ function renderQuickBtns(){
 renderQuickBtns();
 renderScope();
 document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
+/* pasting a column of ASINs/SKUs: keep the line breaks as separators instead of letting the browser squash them */
+document.getElementById('search').addEventListener('paste',e=>{
+  const txt=(e.clipboardData||window.clipboardData).getData('text')||'';
+  if(!/[\n\r\t]/.test(txt.trim()))return;
+  e.preventDefault();
+  const parts=txt.split(/[\n\r\t,;]+/).map(t=>t.trim()).filter(Boolean);
+  const inp=e.target,a=inp.selectionStart||0,b=inp.selectionEnd||0;
+  const before=inp.value.slice(0,a),after=inp.value.slice(b);
+  inp.value=(before&&!/[,;]\s*$/.test(before)?before+', ':before)+[...new Set(parts)].join(', ')+(after?', '+after:'');
+  curSearch=inp.value.toLowerCase();render();
+});
+/* several terms (comma / semicolon / newline separated, or a run of ASINs) = show rows matching ANY of them */
+function searchTerms(s){
+  s=(s||'').trim();if(!s)return [];
+  if(/[,;\n]/.test(s))return [...new Set(s.split(/[,;\n]+/).map(t=>t.trim()).filter(Boolean))];
+  const ws=s.split(/\s+/);
+  if(ws.length>1&&ws.every(t=>/^b0[a-z0-9]{8}$/.test(t)))return [...new Set(ws)];
+  return [s];
+}
+let searchMiss=[];
 
 /* ---- condition filters (build-your-own) ---- */
 const FIELDS=[
@@ -461,13 +527,20 @@ document.addEventListener('click',e=>{if(e.target.isConnected&&!filtPop.contains
 
 /* ---- my views (personal saved views - each person sees only their own) ---- */
 let MYVIEWS=[],activeView=null;
-function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc};}
+function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc,
+  cols:{order:orderedCols().map(c=>c[0]).filter(k=>k!=='sel'),visible:Object.assign({},visible),w:Object.assign({},colW)}};}
 function applyView(v){
   const d=v.def||{};
   curScope=d.scope||'top';curFilter=d.tier||'FLAGGED';quick=d.quick||null;curTag=d.tag||null;
   curSearch=d.search||'';document.getElementById('search').value=curSearch;
   CONDS=(d.conds||[]).map(c=>({...c}));syncFiltBtn();
   if(d.sortK){sortK=d.sortK;sortAsc=!!d.sortAsc;}
+  if(d.cols){ // views saved before the column-layout release have no cols -> layout left as is
+    if(Array.isArray(d.cols.order))colOrder=d.cols.order.slice();
+    if(d.cols.visible){COLS.forEach(c=>{if(c[0] in d.cols.visible)visible[c[0]]=!!d.cols.visible[c[0]];});visible.sel=true;}
+    colW=Object.assign({},d.cols.w||{});
+    saveCols();applyColW();renderColPop();
+  }
   activeView=v.id;
   renderScope();renderStats();renderTierChips();renderQuickBtns();renderViews();render();
 }
@@ -508,7 +581,7 @@ function renderViews(){
   });
   const sv=document.createElement('button');sv.className='qbtn';sv.type='button';
   sv.textContent='+ Save current view';
-  sv.title='Saves the current scope, chip, quick view, tag, search, filters and sort as a one-click view only you can see';
+  sv.title='Saves the current scope, chip, quick view, tag, search, filters, sort and column layout (order, widths, shown/hidden) as a one-click view only you can see';
   sv.onclick=saveCurrentView;vr.appendChild(sv);
 }
 renderViews();loadViews();
@@ -516,11 +589,11 @@ renderViews();loadViews();
 /* ---- CSV export of the current (filtered) rows ---- */
 function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 document.getElementById('csvBtn').onclick=()=>{
-  const cols=['parent_asin','asin','sku','parent_sku','name','color','season','discontinued','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
+  const cols=['parent_asin','asin','sku','sku_fbm','parent_sku','name','color','season','discontinued','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
   const lines=[cols.join(',')];
   filteredRows().forEach(r=>{
     const g=r._gm!=null?r._gm:r.gm;
-    lines.push([r.parent||'',r.asin,csvEsc(r.sku||''),csvEsc(r.parentSku||''),csvEsc(r.name),csvEsc(r.color||''),seasonKey(r.season)||'',r.disc?'Y':'',
+    lines.push([r.parent||'',r.asin,csvEsc(r.skuFba||r.sku||''),csvEsc(r.skuFbm||''),csvEsc(r.parentSku||''),csvEsc(r.name),csvEsc(r.color||''),seasonKey(r.season)||'',r.disc?'Y':'',
       csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
       r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
       g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
@@ -593,9 +666,10 @@ const STICKY=['sel','img','tier','parent','asin','name'];
 function stickify(){
   const ths=[...document.querySelectorAll('#hrow th')];
   let left=0;const offs={};
-  for(const th of ths){const k=th.dataset.k;
-    if(!STICKY.includes(k))break;
-    offs[k]=left;left+=th.offsetWidth;}
+  // frozen zone = the first N shown columns, N = how many of the default frozen set are shown.
+  // So a column dragged into the first N positions becomes frozen, one dragged out scrolls.
+  const nFrozen=COLS.filter(c=>STICKY.includes(c[0])&&visible[c[0]]).length;
+  ths.slice(0,nFrozen).forEach(th=>{offs[th.dataset.k]=left;left+=th.offsetWidth;});
   const keys=Object.keys(offs),last=keys[keys.length-1];
   ths.forEach(th=>{const k=th.dataset.k;
     if(k in offs){th.classList.add('stick');th.style.left=offs[k]+'px';th.classList.toggle('stick-last',k===last);}});
@@ -604,7 +678,7 @@ function stickify(){
 }
 
 /* header tooltips */
-const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, HIGH < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',sku:'Seller SKU (FBA-preferred)',parentSku:'Parent SKU (from Sellery) - click a value to group its variations',color:'Color (from the Amazon catalog)',season:'Seasonal group (from Xnurta product line) - drives the seasonal restock factor',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Monthly units ordered since Jan 2025; 2025 and 2026 are colored separately so you can compare the same month year-over-year',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x seasonally-adjusted units/day - FBA on hand - inbound. A up/down arrow means the prior-year YoY shape scaled the forecast for the upcoming window. Change the base target + season factors under "How the flags work".'};
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, HIGH < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',sku:'Seller SKUs for this ASIN - the FBA SKU and the FBM SKU. Hover a cell to see every SKU on the ASIN; search finds any of them',parentSku:'Parent SKU (from Sellery) - click a value to group its variations',color:'Color (from the Amazon catalog)',season:'Seasonal group (from Xnurta product line) - drives the seasonal restock factor',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Monthly units ordered since Jan 2025; 2025 and 2026 are colored separately so you can compare the same month year-over-year',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x seasonally-adjusted units/day - FBA on hand - inbound. A up/down arrow means the prior-year YoY shape scaled the forecast for the upcoming window. Change the base target + season factors under "How the flags work".'};
 
 /* ---- season chips + seasonal restock factors ---- */
 const SEASON_META={Winter:['Winter','#2a78d6','#e7f0fb'],Summer:['Summer','#c9791b','#fbeede'],Bridal:['Bridal','#a3568c','#f6e9f2'],Other:['Other','#6b7688','#eef1f5']};
@@ -839,7 +913,7 @@ function updateBulkBar(){
 document.getElementById('tbl').addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='selAll'){const shown=filteredRows();if(t.checked)shown.forEach(r=>SELECTED.add(r.asin));else shown.forEach(r=>SELECTED.delete(r.asin));render();return;}
-  if(t.classList&&t.classList.contains('rowsel')){if(t.checked)SELECTED.add(t.dataset.asin);else SELECTED.delete(t.dataset.asin);syncSelAll();updateBulkBar();}
+  if(t.classList&&t.classList.contains('rowsel')){if(t.checked)SELECTED.add(t.dataset.asin);else SELECTED.delete(t.dataset.asin);const tr=t.closest('tr');if(tr)tr.classList.toggle('selrow',t.checked);syncSelAll();updateBulkBar();}
 });
 document.addEventListener('click',e=>{if(e.target.isConnected&&!e.target.closest('.bbtn'))closeBpops();});
 
@@ -856,7 +930,13 @@ function cellHTML(k,r){
     case 'parent': return '<td class="asin" data-c="parent">'+(r.parent?'<a href="https://www.amazon.com/dp/'+esc(r.parent)+'" target="_blank" rel="noopener" style="color:#345d9d;text-decoration:none">'+esc(r.parent)+'</a>':'<span class="muted">-</span>')+'</td>';
     case 'asin': return '<td class="asin" data-c="asin">'+esc(r.asin)+'</td>';
     case 'name': return '<td class="name" data-c="name" title="'+esc(r.name)+'"><div class="nametrunc">'+esc(r.name)+'</div></td>';
-    case 'sku': return '<td data-c="sku" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#5b6678" title="'+esc(r.sku||r.skuList||'')+'">'+(r.sku?esc(r.sku):'<span class="muted">-</span>')+'</td>';
+    case 'sku': {
+      // both channel SKUs in the one column; rows from a sync before the FBA/FBM split only have r.sku
+      const a=r.skuFba||'',b=r.skuFbm||'',one=(!a&&!b)?(r.sku||''):'';
+      const ln=(t,v)=>'<div style="overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:27px;font-size:9px;font-weight:800;letter-spacing:.3px;color:'+(t==='FBA'?'#345d9d':'#8a5a00')+'">'+t+'</span>'+esc(v)+'</div>';
+      return '<td data-c="sku" style="max-width:190px;overflow:hidden;white-space:nowrap;font-size:11.5px;color:#5b6678;line-height:1.5" title="'+esc(r.skuList||r.sku||'')+'">'
+        +(a||b?(a?ln('FBA',a):'')+(b?ln('FBM',b):''):(one?esc(one):'<span class="muted">-</span>'))+'</td>';
+    }
     case 'parentSku': return '<td data-c="parentSku" style="font-size:11.5px;color:#5b6678;white-space:nowrap" title="Parent SKU'+(r.parentSku?' - click to group its variations':'')+'">'+(r.parentSku?'<span class="pskulink" data-psku="'+esc(r.parentSku)+'" style="color:#345d9d;cursor:pointer">'+esc(r.parentSku)+'</span>':'<span class="muted">-</span>')+'</td>';
     case 'color': return '<td data-c="color" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#5b6678" title="'+esc(r.color||'')+'">'+(r.color?esc(r.color):'<span class="muted">-</span>')+'</td>';
     case 'season': return '<td data-c="season">'+seasonChip(r.season)+'</td>';
@@ -928,8 +1008,17 @@ function filteredRows(){
   else if(curFilter!=='ALL')rows=rows.filter(r=>r.tier===curFilter);
   if(quick){const fn=QUICK.find(q=>q[0]===quick)[2];rows=rows.filter(fn);}
   if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
-  if(curSearch)rows=rows.filter(r=>(r.name+' '+r.asin+' '+(r.parent||'')+' '+(r.parentSku||'')+' '+(r.color||'')+' '+(r.season||'')+' '+(r.disc?'disc discontinued':'')+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase().includes(curSearch));
   if(CONDS.length)rows=rows.filter(r=>CONDS.every(c=>condTest(r,c)));
+  searchMiss=[];
+  const terms=searchTerms(curSearch);
+  if(terms.length){
+    const hit=new Set();
+    rows=rows.filter(r=>{
+      const hay=(r.name+' '+r.asin+' '+(r.parent||'')+' '+(r.parentSku||'')+' '+(r.color||'')+' '+(r.season||'')+' '+(r.disc?'disc discontinued':'')+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase();
+      let ok=false;for(const t of terms){if(hay.includes(t)){ok=true;hit.add(t);}}
+      return ok;});
+    if(terms.length>1)searchMiss=terms.filter(t=>!hit.has(t));
+  }
   rows.sort((a,b)=>{let x,y;
     if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
     else if(sortK==='risk'){x=RORDER[a.risk];y=RORDER[b.risk]}
@@ -939,27 +1028,57 @@ function filteredRows(){
     return sortAsc?x-y:y-x;});
   return rows;
 }
+/* header drag-to-reorder + drag-edge-to-resize */
+let _dragK=null,_rzEnd=0,_rzOn=false;
+function wireHeader(){
+  const ths=[...document.querySelectorAll('#hrow th')];
+  const clear=()=>ths.forEach(t=>t.classList.remove('dropL','dropR','dragging'));
+  ths.forEach(th=>{const k=th.dataset.k;if(k==='sel')return;
+    th.ondragstart=e=>{if(_rzOn){e.preventDefault();return;}
+      _dragK=k;th.classList.add('dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',k);}catch(_){}};
+    th.ondragend=()=>{_dragK=null;clear();};
+    th.ondragover=e=>{if(!_dragK||_dragK===k)return;e.preventDefault();e.dataTransfer.dropEffect='move';
+      const b=th.getBoundingClientRect(),after=e.clientX>b.left+b.width/2;
+      th.classList.toggle('dropR',after);th.classList.toggle('dropL',!after);};
+    th.ondragleave=()=>th.classList.remove('dropL','dropR');
+    th.ondrop=e=>{e.preventDefault();const src=_dragK;_dragK=null;if(!src||src===k)return;
+      const b=th.getBoundingClientRect();moveCol(src,k,e.clientX>b.left+b.width/2);renderColPop();render();};
+    const rz=th.querySelector('.rz');if(!rz)return;
+    rz.onclick=e=>e.stopPropagation();
+    rz.ondblclick=e=>{e.stopPropagation();delete colW[k];saveCols();applyColW();stickify();};
+    rz.onmousedown=e=>{e.preventDefault();e.stopPropagation();
+      _rzOn=true;rz.classList.add('on');const x0=e.clientX,w0=th.offsetWidth;let raf=0;
+      const mv=ev=>{colW[k]=Math.max(40,Math.min(900,w0+ev.clientX-x0));
+        if(!raf)raf=requestAnimationFrame(()=>{raf=0;applyColW();stickify();});};
+      const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+        _rzOn=false;_rzEnd=Date.now();rz.classList.remove('on');saveCols();applyColW();stickify();};
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);};
+  });
+}
 function render(){
-  const shown=COLS.filter(c=>visible[c[0]]);
+  const shown=orderedCols().filter(c=>visible[c[0]]);
   document.getElementById('hrow').innerHTML=shown.map(([k,label])=>
     k==='sel'?'<th data-k="sel" class="selc"><input type="checkbox" id="selAll" title="Select all shown rows"></th>'
-    :`<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','parent','asin','sku','parentSku','color','season','risk','trend','notes'].includes(k)?'':'r'}">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}</th>`).join('');
+    :`<th data-k="${k}" title="${esc(TITLES[k]||'')}" class="${['name','img','tier','parent','asin','sku','parentSku','color','season','risk','trend','notes'].includes(k)?'':'r'}" draggable="true">${label}${sortK===k?(sortAsc?' &#9650;':' &#9660;'):''}<span class="rz" draggable="false"></span></th>`).join('');
+  wireHeader();
   let rows=filteredRows();
   const totalRows=rows.length,MAXR=500;
   const cnt=document.getElementById('count');
   const anyFilter=curFilter!=='FLAGGED'||quick||curTag||curSearch||CONDS.length;
   cnt.innerHTML=esc(totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':''))
+    +(searchMiss.length?' <span style="color:#a4161a;font-weight:600" title="'+esc(searchMiss.join(', '))+'">&middot; '+searchMiss.length+' of your search terms not found here: '+esc(searchMiss.slice(0,8).join(', '))+(searchMiss.length>8?' ...':'')+'</span>':'')
     +(anyFilter?' <button id="clearAll" type="button" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:0 4px">&#10005; Clear all filters</button>':'');
   const ca=document.getElementById('clearAll');if(ca)ca.onclick=resetAll;
   if(totalRows>MAXR)rows=rows.slice(0,MAXR);
   let html='';
   if(!rows.length){
-    const nc=COLS.filter(c=>visible[c[0]]).length;
+    const nc=shown.length;
     html='<tr><td colspan="'+nc+'" style="text-align:center;padding:36px;color:#8b95a7;font-size:13px">No products match the current filters.'
       +' <button type="button" id="clearEmpty" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:13px;font-weight:600">Clear all filters</button></td></tr>';
   }
+  let ri=0;
   for(const r of rows){
-    html+='<tr class="mainrow">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
+    html+='<tr class="mainrow'+((ri++)%2?' alt':'')+(SELECTED.has(r.asin)?' selrow':'')+'">'+shown.map(([k])=>cellHTML(k,r)).join('')+'</tr>';
     if(openTrend===r.asin)html+='<tr class="trendrow"><td colspan="'+shown.length+'"><b style="font-size:12px">'+esc(r.name.slice(0,80))+'</b> - monthly units ordered, Jan 2025 onward'+yoyText(r)+'<br>'+trendSVG(r)+'</td></tr>';
   }
   document.getElementById('tb').innerHTML=html;
@@ -970,6 +1089,7 @@ function render(){
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
   document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
     if(['sel','img','trend','notes'].includes(k))return;
+    if(Date.now()-_rzEnd<350)return; // the click that ends a resize drag is not a sort
     if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=['tier','risk','fbaDays','combDays','inv','fbm','name','asin','parent','tags','kw','category'].includes(k);}
     render();});
   renderTagChips();
