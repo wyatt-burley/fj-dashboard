@@ -23,7 +23,7 @@ def primary_sku(skus):
         return {'FBA': 0, 'FJ': 1, 'FBM': 1}.get(t, 2)
     return sorted(skus, key=rank)[0] if skus else ''
 
-CATALOG_VER = 2   # bump to force a one-time re-pull of every image + color from the Amazon catalog
+CATALOG_VER = 3   # bump to force a one-time re-pull of every image + color from the Amazon catalog
 
 def main_image(image_sets):
     """Smallest MAIN image link from a Catalog Items `images` block (falls back to the smallest of
@@ -395,10 +395,21 @@ def run_fast():
     if need:
         print('catalog backfill (image+color) for', len(need), 'ASINs' + (' [full re-pull]' if force_catalog else '') + '...', flush=True)
         failed, with_attrs = 0, True
+        returned, dbg = 0, []
         def catalog(batch, included):
-            return spapi.get('/catalog/2022-04-01/items', {
-                'identifiers': ','.join(batch), 'identifiersType': 'ASIN',
-                'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': included})
+            # pageSize defaults to 10 on this endpoint, so a 20-ASIN request without it only gets
+            # the first 10 items back. Ask for 20 and follow the page token if Amazon still splits.
+            params = {'identifiers': ','.join(batch), 'identifiersType': 'ASIN',
+                      'marketplaceIds': spapi.MARKETPLACE_ID, 'includedData': included, 'pageSize': 20}
+            d = spapi.get('/catalog/2022-04-01/items', params)
+            items = list(d.get('items') or [])
+            for _ in range(3):
+                tok = (d.get('pagination') or {}).get('nextToken')
+                if not tok or len(items) >= len(batch): break
+                time.sleep(0.6)
+                d = spapi.get('/catalog/2022-04-01/items', dict(params, pageToken=tok))
+                items += list(d.get('items') or [])
+            return {'items': items}
         for i in range(0, len(need), 20):
             batch = need[i:i+20]
             try:
@@ -410,12 +421,19 @@ def run_fast():
                     print('  catalog with attributes failed, retrying without:', str(e)[:120], flush=True)
                     d = catalog(batch, 'images,summaries')
                     with_attrs = False
+                returned += len(d.get('items', []))
                 for it in d.get('items', []):
                     a = it['asin']
                     link = main_image(it.get('images'))
                     if link: images[a] = link
                     col = catalog_color(it)
                     if col: colors[a] = col
+                    elif len(dbg) < 6:
+                        # returned by Amazon but no color found: record where a color might be hiding
+                        at = it.get('attributes') or {}
+                        dbg.append((a, {k: v for k, v in ((it.get('summaries') or [{}])[0]).items()
+                                        if k in ('color', 'style', 'size', 'itemName')},
+                                    {k: at[k] for k in at if re.search(r'colou?r|style|pattern|variation|theme', k, re.I)}))
                 for a in batch:
                     images.setdefault(a, ''); colors.setdefault(a, '')
             except Exception as e:
@@ -424,6 +442,9 @@ def run_fast():
             time.sleep(1.2)
         state_put('images', images)
         state_put('colors', colors)
+        print(f'  catalog: Amazon returned {returned} of {len(need)} requested ASINs', flush=True)
+        for a, summ, at in dbg:
+            print('  no color for', a, '| summary:', json.dumps(summ)[:200], '| attributes:', json.dumps(at)[:300], flush=True)
         print(f'  catalog: {sum(1 for a in need if colors.get(a))}/{len(need)} with color, '
               f'{sum(1 for a in need if images.get(a))}/{len(need)} with image, {failed} failed batches'
               + ('' if with_attrs else ' (attributes unavailable)'), flush=True)
