@@ -41,8 +41,16 @@ svg text{font-family:inherit}
 .qbtn{border:1px dashed #b9c6da;background:#f7fafd;border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;color:#345d9d;display:flex;align-items:center;gap:6px}
 .qbtn.active{background:#345d9d;color:#fff;border-color:#345d9d;border-style:solid}
 .qbtn .cnt{opacity:.7;font-weight:700}
-input.search{flex:1;min-width:200px;border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:13px;outline:none}
-input.search:focus{border-color:#1b6fd4}
+.swrap{position:relative;flex:1;min-width:220px;height:35px}
+textarea.search{position:absolute;left:0;right:0;top:0;width:100%;height:35px;box-sizing:border-box;border:1px solid #d6dce6;border-radius:8px;padding:8px 74px 8px 11px;font:13px/17px inherit;font-family:inherit;outline:none;resize:none;white-space:pre;overflow:hidden;background:#fff;z-index:1}
+textarea.search:focus{border-color:#1b6fd4}
+.swrap.open textarea.search{height:236px;overflow:auto;z-index:45;border-color:#1b6fd4;box-shadow:0 10px 28px rgba(20,30,60,.22)}
+.swrap .sexp{position:absolute;right:5px;top:5px;z-index:46;height:25px;min-width:27px;border:1px solid #d6dce6;background:#f7fafd;border-radius:6px;cursor:pointer;color:#485263;font-size:13px;line-height:1;padding:0 6px}
+.swrap .sexp:hover{background:#e6f0ff;border-color:#8fb0e6}
+.swrap.open .sexp{background:#1b6fd4;border-color:#1b6fd4;color:#fff}
+.swrap .scount{position:absolute;right:38px;top:7px;z-index:46;background:#1b2333;color:#fff;border-radius:10px;padding:2px 8px;font-size:10.5px;font-weight:700;pointer-events:none;display:none}
+.swrap .shint{position:absolute;left:0;right:0;top:240px;z-index:45;display:none;font-size:11px;color:#5b6678;background:#fff;border:1px solid #d6dce6;border-radius:0 0 8px 8px;padding:5px 11px;box-shadow:0 10px 28px rgba(20,30,60,.22)}
+.swrap.open .shint{display:block}
 /* tier chips get their own row so the search controls + menus always fit on one line */
 .toolbar>.filters{flex:0 0 100%}
 select.ssel{border:1px solid #d6dce6;background:#fff;border-radius:8px;padding:8px 6px;font-size:12.5px;font-family:inherit;color:#485263;font-weight:600;flex:none;cursor:pointer;max-width:150px}
@@ -197,7 +205,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   <div class="filters" id="filters"></div>
   <select class="ssel" id="sField" title="Which column the search looks in"></select>
   <select class="ssel" id="sMode" title="How the search matches. With several terms: contains / is exactly / starts / ends = rows matching ANY term; contains all = rows matching EVERY term; doesn't contain = rows matching NONE"></select>
-  <input class="search" id="search" placeholder="Search - or paste a list of ASINs / SKUs / keywords" title="Type one term, or several separated by commas. Paste a column of ASINs or SKUs to find them all at once. Use the two menus on the left to pick the column and how it matches.">
+  <div class="swrap" id="swrap"><textarea class="search" id="search" rows="1" spellcheck="false" autocomplete="off" placeholder="Search - or paste a list of ASINs / SKUs / keywords" title="Type one term, or paste a column of ASINs, SKUs or keywords - the box opens up and keeps one per line. Use the two menus on the left to pick the column and how it matches."></textarea><span class="scount" id="sCount"></span><button class="sexp" id="sExpand" type="button" title="Open a bigger box to paste or edit a list (one per line)">&#10530;</button><div class="shint">One ASIN, SKU or keyword per line. Esc or click outside to close - the search stays on.</div></div>
   <input class="who" id="whoami" placeholder="Your name (for notes)">
   <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
   <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
@@ -439,17 +447,43 @@ function renderQuickBtns(){
 renderQuickBtns();
 renderScope();
 document.getElementById('search').oninput=e=>{curSearch=e.target.value.toLowerCase();render()};
-/* pasting a column of ASINs/SKUs: keep the line breaks as separators instead of letting the browser squash them */
-document.getElementById('search').addEventListener('paste',e=>{
+/* the search box is one line when idle and opens into a tall list box (one term per line) on the expand
+   button, on Enter, or when a list is pasted */
+const sBox=document.getElementById('search'),sWrap=document.getElementById('swrap'),sExp=document.getElementById('sExpand');
+function searchOpen(on){
+  if(on===sWrap.classList.contains('open'))return;
+  sWrap.classList.toggle('open',on);
+  sExp.innerHTML=on?'&#10529;':'&#10530;';
+  sExp.title=on?'Close the list box (the search stays on)':'Open a bigger box to paste or edit a list (one per line)';
+  if(on){ // show an existing comma list as one term per line
+    if(/[,;]/.test(sBox.value)&&!/\n/.test(sBox.value)){sBox.value=sBox.value.split(/[,;]+/).map(t=>t.trim()).filter(Boolean).join('\n');curSearch=sBox.value.toLowerCase();}
+    sBox.focus();
+  }else sBox.scrollTop=0;
+}
+function syncSearchBox(){ // term-count badge, shown while the box is closed and holds a list
+  const n=searchTerms(curSearch,curSField).length,c=document.getElementById('sCount');
+  c.textContent=n+' items';c.style.display=n>1&&!sWrap.classList.contains('open')?'block':'none';
+}
+sExp.onclick=e=>{e.stopPropagation();searchOpen(!sWrap.classList.contains('open'));syncSearchBox();};
+sBox.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!sWrap.classList.contains('open')){searchOpen(true);}   // Enter starts a second line -> open up
+  else if(e.key==='Escape'&&sWrap.classList.contains('open')){searchOpen(false);syncSearchBox();}
+});
+document.addEventListener('click',e=>{if(sWrap.classList.contains('open')&&e.target.isConnected&&!sWrap.contains(e.target)){searchOpen(false);syncSearchBox();}});
+/* pasting a column (or several spreadsheet cells): one term per line, duplicates dropped, box opens */
+sBox.addEventListener('paste',e=>{
   const txt=(e.clipboardData||window.clipboardData).getData('text')||'';
   if(!/[\n\r\t]/.test(txt.trim()))return;
   e.preventDefault();
-  const parts=txt.split(/[\n\r\t,;]+/).map(t=>t.trim()).filter(Boolean);
-  const inp=e.target,a=inp.selectionStart||0,b=inp.selectionEnd||0;
-  const before=inp.value.slice(0,a),after=inp.value.slice(b);
-  inp.value=(before&&!/[,;]\s*$/.test(before)?before+', ':before)+[...new Set(parts)].join(', ')+(after?', '+after:'');
-  curSearch=inp.value.toLowerCase();render();
+  const parts=[...new Set(txt.split(/[\n\r\t,;]+/).map(t=>t.trim()).filter(Boolean))];
+  const a=sBox.selectionStart||0,b=sBox.selectionEnd||0;
+  const before=sBox.value.slice(0,a).replace(/[,;\s]+$/,''),after=sBox.value.slice(b).replace(/^[,;\s]+/,'');
+  sBox.value=(before?before+'\n':'')+parts.join('\n')+(after?'\n'+after:'');
+  curSearch=sBox.value.toLowerCase();searchOpen(true);
+  const pos=((before?before+'\n':'')+parts.join('\n')).length;sBox.setSelectionRange(pos,pos);
+  render();
 });
+
 /* ---- search: pick a column + a match mode; several terms at once ---- */
 const SFIELDS=[['any','Anywhere'],['asin','ASIN'],['parent','Parent ASIN'],['sku','SKU'],['parentSku','Parent SKU'],['name','Product'],['kw','Keyword'],['category','Category'],['tags','Tags'],['color','Color']];
 const SMODES=[['has','contains'],['all','contains all'],['nhas',"doesn't contain"],['is','is exactly'],['starts','starts with'],['ends','ends with']];
@@ -1128,7 +1162,7 @@ function render(){
   const ce=document.getElementById('clearEmpty');if(ce)ce.onclick=resetAll;
   stickify();
   saveState();
-  syncSelAll();updateBulkBar();
+  syncSelAll();updateBulkBar();syncSearchBox();
   document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('active',b.dataset.f===curFilter));
   document.querySelectorAll('#hrow th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
     if(['sel','img','trend','notes'].includes(k))return;
