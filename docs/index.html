@@ -43,6 +43,10 @@ svg text{font-family:inherit}
 .qbtn .cnt{opacity:.7;font-weight:700}
 input.search{flex:1;min-width:200px;border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:13px;outline:none}
 input.search:focus{border-color:#1b6fd4}
+/* tier chips get their own row so the search controls + menus always fit on one line */
+.toolbar>.filters{flex:0 0 100%}
+select.ssel{border:1px solid #d6dce6;background:#fff;border-radius:8px;padding:8px 6px;font-size:12.5px;font-family:inherit;color:#485263;font-weight:600;flex:none;cursor:pointer;max-width:150px}
+select.ssel.on{border-color:#1b6fd4;color:#1b6fd4;background:#f2f7ff}
 input.who{border:1px solid #d6dce6;border-radius:8px;padding:8px 11px;font-size:12.5px;outline:none;width:170px;flex:none}
 .colbtn{border:1px solid #d6dce6;background:#fff;border-radius:8px;padding:8px 12px;font-size:12.5px;cursor:pointer;font-weight:600;color:#485263;flex:none}
 .colpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:10px 14px;display:none;columns:2;gap:18px;min-width:320px}
@@ -54,7 +58,7 @@ td.stick-last,th.stick-last{border-right:2px solid #c3ccda}
 .filtpop{position:absolute;right:0;top:38px;z-index:60;background:#fff;border:1px solid #d6dce6;border-radius:10px;box-shadow:0 8px 24px rgba(20,30,60,.18);padding:14px 16px;display:none;min-width:520px}
 .filtpop .frow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .filtpop select,.filtpop input{border:1px solid #d6dce6;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit;background:#fff}
-.filtpop select.ffield{width:170px}.filtpop select.fop{width:120px}.filtpop input.fval{width:130px}
+.filtpop select.ffield{width:150px}.filtpop select.fop{width:130px}.filtpop input.fval{width:230px}
 .filtpop .fdel{border:none;background:none;color:#a7b0c0;cursor:pointer;font-size:15px;padding:2px 5px}
 .filtpop .fdel:hover{color:#a4161a}
 .filtpop .fand{font-size:11px;font-weight:700;color:#8b95a7;width:20px;text-align:center}
@@ -191,7 +195,9 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
 <div class="quickrow" id="scoperow"></div>
 <div class="toolbar">
   <div class="filters" id="filters"></div>
-  <input class="search" id="search" placeholder="Search product, ASIN, SKU, or keyword - or paste a list of ASINs/SKUs" title="Paste several ASINs or SKUs (one per line, or separated by commas) to find them all at once">
+  <select class="ssel" id="sField" title="Which column the search looks in"></select>
+  <select class="ssel" id="sMode" title="How the search matches. With several terms: contains / is exactly / starts / ends = rows matching ANY term; contains all = rows matching EVERY term; doesn't contain = rows matching NONE"></select>
+  <input class="search" id="search" placeholder="Search - or paste a list of ASINs / SKUs / keywords" title="Type one term, or several separated by commas. Paste a column of ASINs or SKUs to find them all at once. Use the two menus on the left to pick the column and how it matches.">
   <input class="who" id="whoami" placeholder="Your name (for notes)">
   <div class="colwrap"><button class="colbtn" id="filtBtn" type="button">Filters &#9662;</button><div class="filtpop" id="filtPop"></div></div>
   <div class="colwrap"><button class="colbtn" id="colBtn" type="button">Columns &#9662;</button><div class="colpop" id="colPop"></div></div>
@@ -385,7 +391,7 @@ document.getElementById('colBtn').onclick=e=>{const fp=document.getElementById('
 document.addEventListener('click',e=>{if(!colPop.contains(e.target)&&e.target.id!=='colBtn')colPop.style.display='none';});
 
 /* ---- filters ---- */
-let curScope='top',curFilter='FLAGGED',curSearch='',sortK='fbaDays',sortAsc=true,quick=null;
+let curScope='top',curFilter='FLAGGED',curSearch='',curSField='any',curSMode='has',sortK='fbaDays',sortAsc=true,quick=null;
 function baseRows(){return curScope==='top'?R.filter(r=>r.top!==false):R.slice();}
 const tierDefs=[['FLAGGED','#1b2333',r=>r.tier!=='OK'],['AT RISK','#a4161a',r=>r.risk==='AT_RISK'],['OUT','#912018',r=>r.tier==='OUT'],['CRITICAL','#d4541a',r=>r.tier==='CRITICAL'],['LOW','#cc9a00',r=>r.tier==='LOW'],['ALL','#5b6678',r=>true]];
 function renderTierChips(){
@@ -444,14 +450,48 @@ document.getElementById('search').addEventListener('paste',e=>{
   inp.value=(before&&!/[,;]\s*$/.test(before)?before+', ':before)+[...new Set(parts)].join(', ')+(after?', '+after:'');
   curSearch=inp.value.toLowerCase();render();
 });
-/* several terms (comma / semicolon / newline separated, or a run of ASINs) = show rows matching ANY of them */
-function searchTerms(s){
-  s=(s||'').trim();if(!s)return [];
+/* ---- search: pick a column + a match mode; several terms at once ---- */
+const SFIELDS=[['any','Anywhere'],['asin','ASIN'],['parent','Parent ASIN'],['sku','SKU'],['parentSku','Parent SKU'],['name','Product'],['kw','Keyword'],['category','Category'],['tags','Tags'],['color','Color']];
+const SMODES=[['has','contains'],['all','contains all'],['nhas',"doesn't contain"],['is','is exactly'],['starts','starts with'],['ends','ends with']];
+const CODEF=['asin','parent','sku','parentSku']; // code-like columns: values never contain spaces
+/* terms: commas / semicolons / line breaks separate them; in the code-like columns spaces do too */
+function searchTerms(s,f){
+  s=(s||'').trim().toLowerCase();if(!s)return [];
+  if(CODEF.includes(f))return [...new Set(s.split(/[\s,;]+/).filter(Boolean))];
   if(/[,;\n]/.test(s))return [...new Set(s.split(/[,;\n]+/).map(t=>t.trim()).filter(Boolean))];
   const ws=s.split(/\s+/);
   if(ws.length>1&&ws.every(t=>/^b0[a-z0-9]{8}$/.test(t)))return [...new Set(ws)];
   return [s];
 }
+/* the lower-cased value(s) a row has in a column (SKU and Tags hold several) */
+function fieldVals(r,f){
+  const L=x=>String(x==null?'':x).toLowerCase();
+  const skus=()=>L((r.skuList||'')+' '+(r.sku||'')+' '+(r.skuFba||'')+' '+(r.skuFbm||'')).split(/\s+/).filter(Boolean);
+  if(f==='sku')return skus();
+  if(f==='tags')return effTags(r);
+  if(f==='any')return [L(r.name),L(r.asin),L(r.parent),L(r.parentSku),L(r.color),L(r.season),r.disc?'disc discontinued':'',L(r.kw),L(r.category)].concat(effTags(r),skus()).filter(Boolean);
+  return [L(fval(r,f))];
+}
+/* one matcher for the search bar and the Filters menu. hit (optional Set) collects the terms that matched */
+function matchVals(vals,op,terms,hit){
+  const P={has:(v,t)=>v.includes(t),all:(v,t)=>v.includes(t),nhas:(v,t)=>v.includes(t),is:(v,t)=>v===t,isnot:(v,t)=>v===t,
+    starts:(v,t)=>v.startsWith(t),ends:(v,t)=>v.endsWith(t)};
+  if(op==='blank')return !vals.some(v=>v);
+  if(op==='nblank')return vals.some(v=>v);
+  const p=P[op]||P.has;let n=0;
+  for(const t of terms){if(vals.some(v=>p(v,t))){n++;if(hit)hit.add(t);}}
+  return op==='nhas'||op==='isnot'?n===0:op==='all'?n===terms.length:n>0;
+}
+function syncSearchCtl(){
+  const f=document.getElementById('sField'),m=document.getElementById('sMode');
+  if(!f.options.length){SFIELDS.forEach(([k,l])=>f.add(new Option(l,k)));SMODES.forEach(([k,l])=>m.add(new Option(l,k)));
+    f.onchange=()=>{curSField=f.value;syncSearchCtl();render();};m.onchange=()=>{curSMode=m.value;syncSearchCtl();render();};}
+  if(!SFIELDS.some(x=>x[0]===curSField))curSField='any';
+  if(!SMODES.some(x=>x[0]===curSMode))curSMode='has';
+  f.value=curSField;m.value=curSMode;
+  f.classList.toggle('on',curSField!=='any');m.classList.toggle('on',curSMode!=='has');
+}
+syncSearchCtl();
 let searchMiss=[];
 
 /* ---- condition filters (build-your-own) ---- */
@@ -460,9 +500,11 @@ const FIELDS=[
  ['u365','12-Mo units','num'],['daily','Units/day','num'],['inv','FBA Inv','num'],['fbaDays','FBA Days','num'],
  ['fbm','FBM Inv','num'],['inbound','Inbound','num'],['combDays','Total Days','num'],['price','Price','num'],
  ['cost','Unit Cost','num'],['gm','GM %','num'],['name','Product name','text'],['asin','ASIN','text'],
+ ['parent','Parent ASIN','text'],['sku','SKU','text'],['parentSku','Parent SKU','text'],['color','Color','text'],['season','Season','text'],
  ['kw','Keyword','text'],['category','Category','text'],['tags','Tags','text']];
 const NOPS=[['gt','>'],['gte','>='],['lt','<'],['lte','<='],['eq','='],['ne','!=']];
-const TOPS=[['has','contains'],['nhas',"doesn't contain"],['is','is'],['isnot','is not']];
+const TOPS=[['has','contains'],['all','contains all'],['nhas',"doesn't contain"],['is','is exactly'],['isnot','is not'],['starts','starts with'],['ends','ends with'],['blank','is blank'],['nblank','is not blank']];
+const NOVAL=['blank','nblank'];
 let CONDS=[],condDraft=[];
 function fval(r,f){
   if(f==='cost')return COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:r.cost;
@@ -474,8 +516,9 @@ function condTest(r,c){
   const t=(FIELDS.find(x=>x[0]===c.f)||[])[2],v=fval(r,c.f);
   if(t==='num'){const n=Number(c.v);if(isNaN(n))return true;if(v==null)return c.op==='ne';
     return c.op==='gt'?v>n:c.op==='gte'?v>=n:c.op==='lt'?v<n:c.op==='lte'?v<=n:c.op==='eq'?v===n:v!==n;}
-  const s=String(v==null?'':v).toLowerCase(),q=String(c.v||'').toLowerCase();
-  return c.op==='has'?s.includes(q):c.op==='nhas'?!s.includes(q):c.op==='is'?s===q:s!==q;
+  if(NOVAL.includes(c.op))return matchVals(fieldVals(r,c.f),c.op,[]);
+  const q=searchTerms(c.v,c.f);if(!q.length)return true;
+  return matchVals(fieldVals(r,c.f),c.op,q);
 }
 const filtPop=document.getElementById('filtPop'),filtBtn=document.getElementById('filtBtn');
 function renderFiltPop(){
@@ -492,9 +535,11 @@ function renderFiltPop(){
     const t=FIELDS.find(x=>x[0]===c.f)[2];
     const os=document.createElement('select');os.className='fop';
     (t==='num'?NOPS:TOPS).forEach(([k,l])=>{const o=document.createElement('option');o.value=k;o.textContent=l;if(c.op===k)o.selected=true;os.appendChild(o);});
-    os.onchange=()=>c.op=os.value;row.appendChild(os);
+    os.onchange=()=>{c.op=os.value;renderFiltPop();};row.appendChild(os);
     const vi=document.createElement('input');vi.className='fval';vi.value=c.v==null?'':c.v;
-    vi.type=t==='num'?'number':'text';vi.placeholder=t==='num'?'value':'text...';
+    vi.type=t==='num'?'number':'text';vi.placeholder=t==='num'?'value':'text, or several, separated, by commas';
+    if(NOVAL.includes(c.op)){vi.disabled=true;vi.value='';vi.placeholder='';}
+    if(t!=='num')vi.title='Several values separated by commas match ANY of them (or NONE for the negative types). Pasting a column of ASINs or SKUs works too.';
     vi.oninput=()=>c.v=vi.value;
     vi.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();applyConds();}};
     row.appendChild(vi);
@@ -514,7 +559,7 @@ function renderFiltPop(){
   btns.append(clr,can,ap);filtPop.appendChild(btns);
 }
 function applyConds(){
-  CONDS=condDraft.filter(c=>c.v!==''&&c.v!=null).map(c=>({...c}));
+  CONDS=condDraft.filter(c=>NOVAL.includes(c.op)||(c.v!==''&&c.v!=null)).map(c=>({...c}));
   filtPop.style.display='none';syncFiltBtn();render();
 }
 function syncFiltBtn(){filtBtn.innerHTML='Filters ▾'+(CONDS.length?'<span class="cnt2">'+CONDS.length+'</span>':'');}
@@ -527,12 +572,13 @@ document.addEventListener('click',e=>{if(e.target.isConnected&&!filtPop.contains
 
 /* ---- my views (personal saved views - each person sees only their own) ---- */
 let MYVIEWS=[],activeView=null;
-function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc,
+function viewDef(){return {scope:curScope,tier:curFilter,quick:quick,tag:curTag,search:curSearch,sf:curSField,sm:curSMode,conds:CONDS,sortK:sortK,sortAsc:sortAsc,
   cols:{order:orderedCols().map(c=>c[0]).filter(k=>k!=='sel'),visible:Object.assign({},visible),w:Object.assign({},colW)}};}
 function applyView(v){
   const d=v.def||{};
   curScope=d.scope||'top';curFilter=d.tier||'FLAGGED';quick=d.quick||null;curTag=d.tag||null;
   curSearch=d.search||'';document.getElementById('search').value=curSearch;
+  curSField=d.sf||'any';curSMode=d.sm||'has';syncSearchCtl();
   CONDS=(d.conds||[]).map(c=>({...c}));syncFiltBtn();
   if(d.sortK){sortK=d.sortK;sortAsc=!!d.sortAsc;}
   if(d.cols){ // views saved before the column-layout release have no cols -> layout left as is
@@ -1010,14 +1056,11 @@ function filteredRows(){
   if(curTag)rows=rows.filter(r=>effTags(r).includes(curTag));
   if(CONDS.length)rows=rows.filter(r=>CONDS.every(c=>condTest(r,c)));
   searchMiss=[];
-  const terms=searchTerms(curSearch);
+  const terms=searchTerms(curSearch,curSField);
   if(terms.length){
     const hit=new Set();
-    rows=rows.filter(r=>{
-      const hay=(r.name+' '+r.asin+' '+(r.parent||'')+' '+(r.parentSku||'')+' '+(r.color||'')+' '+(r.season||'')+' '+(r.disc?'disc discontinued':'')+' '+(r.kw||'')+' '+(r.category||'')+' '+(TAG_EDITS[r.asin]||r.tags||'')+' '+(r.skuList||'')).toLowerCase();
-      let ok=false;for(const t of terms){if(hay.includes(t)){ok=true;hit.add(t);}}
-      return ok;});
-    if(terms.length>1)searchMiss=terms.filter(t=>!hit.has(t));
+    rows=rows.filter(r=>matchVals(fieldVals(r,curSField),curSMode,terms,hit));
+    if(terms.length>1&&curSMode!=='nhas')searchMiss=terms.filter(t=>!hit.has(t));
   }
   rows.sort((a,b)=>{let x,y;
     if(sortK==='tier'){x=TORDER[a.tier];y=TORDER[b.tier]}
@@ -1066,7 +1109,7 @@ function render(){
   const cnt=document.getElementById('count');
   const anyFilter=curFilter!=='FLAGGED'||quick||curTag||curSearch||CONDS.length;
   cnt.innerHTML=esc(totalRows.toLocaleString()+' ASINs'+(totalRows>MAXR?' — showing the first '+MAXR+' (search, sort or filter to narrow down)':''))
-    +(searchMiss.length?' <span style="color:#a4161a;font-weight:600" title="'+esc(searchMiss.join(', '))+'">&middot; '+searchMiss.length+' of your search terms not found here: '+esc(searchMiss.slice(0,8).join(', '))+(searchMiss.length>8?' ...':'')+'</span>':'')
+    +(searchMiss.length?' <span style="color:#a4161a;font-weight:600" title="'+esc(searchMiss.join(', '))+'">&middot; '+searchMiss.length+' of your search terms matched nothing here: '+esc(searchMiss.slice(0,8).join(', '))+(searchMiss.length>8?' ...':'')+'</span>':'')
     +(anyFilter?' <button id="clearAll" type="button" style="border:none;background:none;color:#1b6fd4;cursor:pointer;font-size:12px;font-weight:600;padding:0 4px">&#10005; Clear all filters</button>':'');
   const ca=document.getElementById('clearAll');if(ca)ca.onclick=resetAll;
   if(totalRows>MAXR)rows=rows.slice(0,MAXR);
@@ -1098,7 +1141,7 @@ document.getElementById('tb').addEventListener('click',e=>{
   const b=e.target.closest('.trbtn');
   if(b){openTrend=openTrend===b.dataset.asin?null:b.dataset.asin;render();return;}
   const ps=e.target.closest('.pskulink');
-  if(ps){const v=ps.dataset.psku||'';const s=document.getElementById('search');s.value=v;curSearch=v.toLowerCase();render();}
+  if(ps){const v=ps.dataset.psku||'';const s=document.getElementById('search');s.value=v;curSearch=v.toLowerCase();curSField='parentSku';curSMode='is';syncSearchCtl();render();}
 });
 document.getElementById('legendBtn').onclick=()=>{
   const lb=document.getElementById('legendBox');
@@ -1151,15 +1194,15 @@ document.getElementById('foot').innerHTML=
 
 /* ---- reset + remembered state ---- */
 function resetAll(){
-  curFilter='FLAGGED';quick=null;curTag=null;curSearch='';CONDS=[];condDraft=[];activeView=null;
-  document.getElementById('search').value='';
+  curFilter='FLAGGED';quick=null;curTag=null;curSearch='';curSField='any';curSMode='has';CONDS=[];condDraft=[];activeView=null;
+  document.getElementById('search').value='';syncSearchCtl();
   syncFiltBtn();renderTierChips();renderQuickBtns();renderViews();render();
 }
 let _stateReady=false;
 function saveState(){
   if(!_stateReady)return;
   try{localStorage.setItem('fj_state',JSON.stringify({scope:curScope,tier:curFilter,quick:quick,tag:curTag,
-    search:curSearch,conds:CONDS,sortK:sortK,sortAsc:sortAsc}));}catch(e){}
+    search:curSearch,sf:curSField,sm:curSMode,conds:CONDS,sortK:sortK,sortAsc:sortAsc}));}catch(e){}
 }
 (function restoreState(){
   try{
@@ -1169,6 +1212,7 @@ function saveState(){
       if(s.tier)curFilter=s.tier;
       quick=s.quick||null;curTag=s.tag||null;
       curSearch=s.search||'';document.getElementById('search').value=curSearch;
+      curSField=s.sf||'any';curSMode=s.sm||'has';syncSearchCtl();
       CONDS=Array.isArray(s.conds)?s.conds:[];
       if(s.sortK){sortK=s.sortK;sortAsc=!!s.sortAsc;}
       syncFiltBtn();renderScope();renderStats();renderTierChips();renderQuickBtns();
