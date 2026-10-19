@@ -4,12 +4,13 @@ on:
   schedule:
     - cron: '17 2,8,14,20 * * *'   # every 6 hours (fast sync)
     - cron: '43 6 * * 1'           # Mondays: 12-month trend refresh
+    - cron: '47 * * * *'           # hourly: FBM stock + POs from Finale (no Amazon calls)
   workflow_dispatch:
     inputs:
       mode:
         description: 'Sync mode'
         type: choice
-        options: [fast, monthly]
+        options: [fast, monthly, finale]
         default: fast
 
 concurrency:
@@ -30,7 +31,11 @@ jobs:
         run: |
           MODE="${{ github.event.inputs.mode }}"
           if [ -z "$MODE" ]; then
-            if [ "${{ github.event.schedule }}" = "43 6 * * 1" ]; then MODE=monthly; else MODE=fast; fi
+            case "${{ github.event.schedule }}" in
+              "43 6 * * 1") MODE=monthly ;;
+              "47 * * * *") MODE=finale ;;
+              *) MODE=fast ;;
+            esac
           fi
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
       - name: Run sync
@@ -42,5 +47,8 @@ jobs:
           SELLER_ID: ${{ secrets.SELLER_ID }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FINALE_API_KEY: ${{ secrets.FINALE_API_KEY }}
+          FINALE_API_SECRET: ${{ secrets.FINALE_API_SECRET }}
+          FINALE_ACCOUNT: funkyjunque
           MODE: ${{ steps.mode.outputs.mode }}
         run: python sync.py
