@@ -115,6 +115,19 @@ def st_parents(raw):
 # ---------------------------------------------------------------- monthly mode
 MONTHLY_START = (2025, 1)   # history floor for YoY seasonality (Jan 2025 onward)
 
+def parse_fbm_listings(raw):
+    """GET_MERCHANT_LISTINGS_ALL_DATA -> ({sku: qty}, {sku: asin}, {sku: name}) for merchant-fulfilled listings."""
+    fbm_by_sku, fbm_asin, fbm_name = {}, {}, {}
+    for g in tsv_rows(raw, 'cp1252'):
+        sku = g('seller-sku')
+        if not sku or g('fulfillment-channel').startswith('AMAZON'): continue
+        q = g('quantity')
+        try: fbm_by_sku[sku] = int(float(q)) if q.strip() else 0
+        except ValueError: fbm_by_sku[sku] = 0
+        if g('asin1').strip(): fbm_asin[sku] = g('asin1').strip()
+        fbm_name[sku] = g('item-name')
+    return fbm_by_sku, fbm_asin, fbm_name
+
 def cover_and_risk(r):
     """(combDays, risk) from a row's FBA, FBM, inbound and 30-day units. Tier is FBA-only and unchanged."""
     daily = (r.get('u30') or 0) / 30
@@ -153,11 +166,47 @@ def refresh_summary_risk(summary, rows):
       'revBuffered': round(sum(r['sales'] for r in top if r['risk'] == 'BUFFERED'), 2),
       'marginAtRisk': round(sum(r['sales']*r['gm'] for r in priced if r['risk']=='AT_RISK'), 2)})
 
+def run_hourly_amazon_fbm():
+    """Hourly FBM refresh without Finale: re-pull Amazon's merchant listings report (the quantity Finale
+    pushes to Amazon every few minutes) and patch FBM / Total Days / risk into the current snapshot.
+    Only touches FBM; FBA, sales and everything else stay from the 6-hourly sync."""
+    rid = spapi.create_report('GET_MERCHANT_LISTINGS_ALL_DATA')
+    raw = spapi.fetch_report(rid) if rid else None
+    if not raw:
+        print('FBM listings report unavailable - snapshot left as is', flush=True); return
+    fbm_by_sku, fbm_asin, _ = parse_fbm_listings(raw)
+    if not fbm_by_sku:
+        print('FBM listings report came back empty - snapshot left as is', flush=True); return
+    snap = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
+    if not snap: print('no snapshot yet'); return
+    data = snap[0]['data']
+    rows = data.get('rows') or []
+    by_asin = {}
+    for sku, q in fbm_by_sku.items():
+        a = fbm_asin.get(sku)
+        if a: by_asin[a] = by_asin.get(a, 0) + (q or 0)
+    changed = 0
+    for r in rows:
+        if r.get('fbmSrc') == 'finale': continue      # rows sourced from Finale (API live) are left to Finale
+        new = by_asin.get(r['asin'], 0)
+        if new != (r.get('fbm') or 0): changed += 1
+        r['fbm'] = new; r['fbmAmz'] = new; r['fbmSrc'] = 'amazon'
+        r['combDays'], r['risk'] = cover_and_risk(r)
+    refresh_summary_risk(data['summary'], rows)
+    data['summary']['fbmAt'] = datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+    data['summary'].setdefault('fbmSource', 'amazon')
+    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', {'id': 1, 'data': data},
+           prefer='resolution=merge-duplicates')
+    print(f"hourly FBM from Amazon listings: {len(fbm_by_sku)} FBM listings, {changed} rows changed | "
+          f"{data['summary']['atRiskCount']} at risk | ${data['summary']['revAtRisk']:,.0f} at risk", flush=True)
+
 def run_finale():
-    """Hourly: Finale stock + POs into the current snapshot. No Amazon calls; updated_at (the
-    Amazon sync time shown on the page) is left alone - summary.finaleAt records this refresh."""
+    """Hourly. Finale stock + POs into the current snapshot when Finale's API is available; otherwise
+    (no key, or FJ's Finale plan has no API access) FBM is refreshed from Amazon's listings report.
+    updated_at (the 6-hourly Amazon sync time shown on the page) is left alone."""
     fin = finale.load(state_get, state_put)
-    if not fin: return
+    if not fin:
+        run_hourly_amazon_fbm(); return
     snap = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
     if not snap: print('no snapshot yet'); return
     data = snap[0]['data']
@@ -173,6 +222,7 @@ def run_finale():
     refresh_summary_risk(data['summary'], rows)
     data['summary']['fbmSource'] = 'finale'
     data['summary']['finaleAt'] = fin['at']
+    data['summary']['fbmAt'] = fin['at']
     sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', {'id': 1, 'data': data},
            prefer='resolution=merge-duplicates')
     print('snapshot patched from Finale:', len(rows), 'rows |', data['summary']['atRiskCount'], 'at risk |',
@@ -297,14 +347,7 @@ def run_fast():
     fbm_by_sku, fbm_asin, fbm_name = {}, {}, {}
     raw = spapi.fetch_report(rid_fbm) if rid_fbm else None
     if raw:
-        for g in tsv_rows(raw, 'cp1252'):
-            sku = g('seller-sku')
-            if not sku or g('fulfillment-channel').startswith('AMAZON'): continue
-            q = g('quantity')
-            try: fbm_by_sku[sku] = int(float(q)) if q.strip() else 0
-            except ValueError: fbm_by_sku[sku] = 0
-            if g('asin1').strip(): fbm_asin[sku] = g('asin1').strip()
-            fbm_name[sku] = g('item-name')
+        fbm_by_sku, fbm_asin, fbm_name = parse_fbm_listings(raw)
     print(' ', len(fbm_by_sku), 'FBM listings', flush=True)
 
     print('sales & traffic 1d/7d/30d...', flush=True)
@@ -561,6 +604,7 @@ def run_fast():
       'inboundTotal': sum(s['inboundWorking']+s['inboundShipped']+s['inboundReceiving'] for s in skus.values()),
       'flaggedWithInbound': sum(1 for r in top if r['tier']!='OK' and r['inbound']>0),
       'fbmSource': 'finale' if fin else 'amazon', 'finaleAt': fin['at'] if fin else None,
+      'fbmAt': datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z',
     }
     data = {'summary': summary, 'rows': rows, 'months': months,
             'aged': aged_totals, 'ltsf': round(sum(p['ais'] for p in planning.values()), 1),
