@@ -9,11 +9,17 @@ MODE=fast (default, every 6h):
 MODE=monthly (weekly):
   12 monthly Sales & Traffic reports -> sync_state.monthly.
 
+MODE=finale (hourly):
+  Re-pull Finale warehouse stock + purchase orders and patch FBM / on order / cover / risk into the
+  existing snapshot (no Amazon calls). Fast mode also pulls Finale. See finale.py.
+
 Env: LWA_CLIENT_ID, LWA_CLIENT_SECRET, LWA_REFRESH_TOKEN,
-     SUPABASE_URL, SUPABASE_SERVICE_KEY  (optional: MARKETPLACE_ID, SELLER_ID, MODE)
+     SUPABASE_URL, SUPABASE_SERVICE_KEY  (optional: MARKETPLACE_ID, SELLER_ID, MODE,
+     FINALE_API_KEY, FINALE_API_SECRET, FINALE_ACCOUNT)
 """
 import calendar, collections, datetime, json, os, re, statistics, time, urllib.request
 import spapi
+import finale
 
 def primary_sku(skus):
     """Pick the display SKU for an ASIN: FBA channel preferred, then FBM/FJ, then any."""
@@ -108,6 +114,69 @@ def st_parents(raw):
 
 # ---------------------------------------------------------------- monthly mode
 MONTHLY_START = (2025, 1)   # history floor for YoY seasonality (Jan 2025 onward)
+
+def cover_and_risk(r):
+    """(combDays, risk) from a row's FBA, FBM, inbound and 30-day units. Tier is FBA-only and unchanged."""
+    daily = (r.get('u30') or 0) / 30
+    inv, fbm, inb = r.get('inv') or 0, r.get('fbm') or 0, r.get('inbound') or 0
+    comb = round((inv + fbm) / daily, 1) if daily > 0 else (999 if inv + fbm else 0)
+    incl = round((inv + inb) / daily, 1) if daily > 0 else 999
+    risk = 'OK' if r.get('tier') == 'OK' else ('AT_RISK' if comb < 14 and incl < 14 else 'BUFFERED')
+    return comb, risk
+
+def finale_fields(asin, skus, amazon_fbm, fin):
+    """Fields a row gets from Finale. Without a Finale match the Amazon listing quantity stays."""
+    v = finale.row_values(asin, skus, fin) if fin else None
+    if not v:
+        return {'fbm': amazon_fbm, 'fbmAmz': amazon_fbm, 'fbmSrc': 'amazon', 'onOrder': 0, 'poEta': '', 'poEtaQty': 0}
+    return {'fbm': v['fbm'], 'fbmAmz': amazon_fbm, 'fbmSrc': 'finale', 'onOrder': v['onOrder'],
+            'poEta': v['poEta'], 'poEtaQty': v['poEtaQty']}
+
+def finale_report(rows):
+    """Log how Finale's FBM compares with Amazon's listing quantity (they should mostly agree:
+    Finale pushes that number to Amazon every few minutes)."""
+    m = [r for r in rows if r.get('fbmSrc') == 'finale']
+    same = sum(1 for r in m if r['fbm'] == r['fbmAmz'])
+    diff = sorted((r for r in m if r['fbm'] != r['fbmAmz']), key=lambda r: -abs(r['fbm'] - r['fbmAmz']))
+    print(f'  finale match: {len(m)}/{len(rows)} rows | FBM equal to Amazon on {same}, different on {len(diff)} | '
+          f'on order: {sum(1 for r in rows if r.get("onOrder"))} rows, {sum(r.get("onOrder") or 0 for r in rows):,} units', flush=True)
+    for r in diff[:12]:
+        print(f"    {r['asin']} {(r.get('sku') or '')[:28]:28} finale {r['fbm']:>6}  amazon {r['fbmAmz']:>6}", flush=True)
+
+def refresh_summary_risk(summary, rows):
+    top = [r for r in rows if r.get('top')]
+    priced = [r for r in top if r.get('gm') is not None]
+    summary.update({
+      'atRiskCount': sum(1 for r in top if r['risk'] == 'AT_RISK'),
+      'bufferedCount': sum(1 for r in top if r['risk'] == 'BUFFERED'),
+      'revAtRisk': round(sum(r['sales'] for r in top if r['risk'] == 'AT_RISK'), 2),
+      'revBuffered': round(sum(r['sales'] for r in top if r['risk'] == 'BUFFERED'), 2),
+      'marginAtRisk': round(sum(r['sales']*r['gm'] for r in priced if r['risk']=='AT_RISK'), 2)})
+
+def run_finale():
+    """Hourly: Finale stock + POs into the current snapshot. No Amazon calls; updated_at (the
+    Amazon sync time shown on the page) is left alone - summary.finaleAt records this refresh."""
+    fin = finale.load(state_get, state_put)
+    if not fin: return
+    snap = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
+    if not snap: print('no snapshot yet'); return
+    data = snap[0]['data']
+    rows = data.get('rows') or []
+    for r in rows:
+        skus = set((r.get('skuList') or '').split()) | {r.get('sku'), r.get('skuFba'), r.get('skuFbm')} - {None, ''}
+        amz = r.get('fbmAmz', r.get('fbm') or 0) if r.get('fbmSrc') else (r.get('fbm') or 0)
+        r.update(finale_fields(r['asin'], skus, amz, fin))
+        r['combDays'], r['risk'] = cover_and_risk(r)
+    bu = finale.bundle_units({r['asin']: r.get('u30') or 0 for r in rows}, fin)
+    for r in rows: r['u30b'] = bu.get(r['asin'], 0)
+    finale_report(rows)
+    refresh_summary_risk(data['summary'], rows)
+    data['summary']['fbmSource'] = 'finale'
+    data['summary']['finaleAt'] = fin['at']
+    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', {'id': 1, 'data': data},
+           prefer='resolution=merge-duplicates')
+    print('snapshot patched from Finale:', len(rows), 'rows |', data['summary']['atRiskCount'], 'at risk |',
+          '$' + format(data['summary']['revAtRisk'], ',.0f'), 'at risk', flush=True)
 
 def run_monthly():
     today = datetime.date.today()
@@ -333,6 +402,14 @@ def run_fast():
           f'{sum(1 for s in fbm_by_sku if s not in skus)} have a SKU that is not an FBA SKU, '
           f'{fbm_unmatched} with no ASIN', flush=True)
 
+    # Finale = source of truth for warehouse (FBM) stock and purchase orders; Amazon's listing
+    # quantity is kept as fbmAmz and used whenever Finale has no product for the ASIN or is down.
+    fin = finale.load(state_get, state_put)
+    for a, r in by_asin.items():
+        r['fin'] = finale_fields(a, r['skus'] | set(r['fbmSkus']), r['fbm'], fin)
+        r['fbm'] = r['fin']['fbm']
+    bundle_u30 = finale.bundle_units(ac30u, fin) if fin else {}
+
     rows = []
     for a, r in by_asin.items():
         if a in ac30u: r['u30'] = ac30u[a]
@@ -382,10 +459,13 @@ def run_fast():
             'added': r['added'], 'winter': is_winter, 'trend': trend,
             'top': r['sales'] >= 1000, 'fbmOnly': fbm_only,
             'aged': r['aged'], 'ais': round(r['ais'], 1),
-            'inbW': r['inbW'], 'inbS': r['inbS'], 'inbR': r['inbR']})
+            'inbW': r['inbW'], 'inbS': r['inbS'], 'inbR': r['inbR'],
+            'fbmAmz': r['fin']['fbmAmz'], 'fbmSrc': r['fin']['fbmSrc'], 'onOrder': r['fin']['onOrder'],
+            'poEta': r['fin']['poEta'], 'poEtaQty': r['fin']['poEtaQty'], 'u30b': bundle_u30.get(a, 0)})
     rows.sort(key=lambda r: (-r['sales'], -r['inv']))
     print(f"  rows: {len(rows)} | FBM-only (exempt from FBA tiers): {sum(1 for r in rows if r['fbmOnly'])} | "
           f"with FBM stock: {sum(1 for r in rows if r['fbm'] > 0)}", flush=True)
+    if fin: finale_report(rows)
 
     # -- catalog backfill: images + color for ASINs missing either (batch of 20;
     #    '' marks known-missing so unfetchable ASINs aren't re-requested every run)
@@ -480,6 +560,7 @@ def run_fast():
       'marginAtRisk': round(sum(r['sales']*r['gm'] for r in priced if r['risk']=='AT_RISK'), 2),
       'inboundTotal': sum(s['inboundWorking']+s['inboundShipped']+s['inboundReceiving'] for s in skus.values()),
       'flaggedWithInbound': sum(1 for r in top if r['tier']!='OK' and r['inbound']>0),
+      'fbmSource': 'finale' if fin else 'amazon', 'finaleAt': fin['at'] if fin else None,
     }
     data = {'summary': summary, 'rows': rows, 'months': months,
             'aged': aged_totals, 'ltsf': round(sum(p['ais'] for p in planning.values()), 1),
@@ -496,5 +577,7 @@ def run_fast():
 if __name__ == '__main__':
     if MODE == 'monthly':
         run_monthly()
+    elif MODE == 'finale':
+        run_finale()
     else:
         run_fast()
