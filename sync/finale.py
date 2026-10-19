@@ -15,11 +15,13 @@ REST calls per load (Finale limit: 300 collection requests / hour):
   product/  (~130 MB full; cached in Supabase sync_state 'finale_products', refreshed incrementally
              by lastUpdatedDate, full re-pull weekly) -> BOM + ASIN per product
 
-Env: FINALE_API_KEY, FINALE_API_SECRET, FINALE_ACCOUNT (default funkyjunque).
+Env: FINALE_API_KEY + FINALE_API_SECRET, or one FINALE_API_CONNECTION holding both
+     ("key:secret", the two on separate lines / separated by spaces, or with "key:" / "secret:" labels);
+     FINALE_ACCOUNT (default funkyjunque).
 Everything degrades: if the secrets are missing or Finale errors, load() returns None and the sync
 keeps Amazon's FBM numbers.
 """
-import base64, datetime, json, math, os, time, urllib.request, urllib.error
+import base64, datetime, json, math, os, re, time, urllib.request, urllib.error
 
 ACCOUNT = os.environ.get('FINALE_ACCOUNT', 'funkyjunque').strip() or 'funkyjunque'
 BASE = f'https://app.finaleinventory.com/{ACCOUNT}/api/'
@@ -29,13 +31,36 @@ WAREHOUSE_ROOT = '100000'
 FULL_PRODUCT_REFRESH_DAYS = 7
 
 
+_LABEL = re.compile(r'^(finale|api|key|secret|api[_ -]?key|api[_ -]?secret|key[_ -]?secret|account|funkyjunque)[:=]?$', re.I)
+
+def _creds():
+    """(key, secret) or a ready 'Basic ...' header string, or None. Never logs the values."""
+    k, sct = os.environ.get('FINALE_API_KEY', '').strip(), os.environ.get('FINALE_API_SECRET', '').strip()
+    if k and sct: return (k, sct)
+    raw = os.environ.get('FINALE_API_CONNECTION', '').strip()
+    if not raw: return None
+    if raw.lower().startswith('basic '): return raw
+    if ':' in raw and not re.search(r'\s', raw):
+        a, b = raw.split(':', 1)
+        if a and b: return (a, b)
+    # labelled or whitespace / comma separated: "API key: X\nSecret: Y", "X Y", "X,Y"
+    parts = [t for t in re.split(r'[\s,;]+|(?<=[A-Za-z]):(?=\s|$)', raw) if t]
+    parts = [t.rstrip(':=') if _LABEL.match(t) else t for t in parts]
+    vals = [t for t in parts if t and not _LABEL.match(t)]
+    vals = [t.split('=', 1)[1] if re.match(r'^(key|secret|api_?key|api_?secret)=', t, re.I) else t for t in vals]
+    if len(vals) == 2: return (vals[0], vals[1])
+    print(f'finale: FINALE_API_CONNECTION is set but could not be split into a key and a secret '
+          f'(found {len(vals)} value(s), {len(raw)} chars). Use "key:secret".', flush=True)
+    return None
+
 def enabled():
-    return bool(os.environ.get('FINALE_API_KEY') and os.environ.get('FINALE_API_SECRET'))
+    return _creds() is not None
 
 
 def _auth():
-    tok = base64.b64encode(f"{os.environ['FINALE_API_KEY']}:{os.environ['FINALE_API_SECRET']}".encode()).decode()
-    return 'Basic ' + tok
+    c = _creds()
+    if isinstance(c, str): return c if c.startswith('Basic ') else 'Basic ' + c.split(None, 1)[1]
+    return 'Basic ' + base64.b64encode(f'{c[0]}:{c[1]}'.encode()).decode()
 
 
 def get(path, params=None, tries=4):
@@ -125,7 +150,7 @@ def load(state_get, state_put):
     """Pull Finale and return {'fbm': {pid: qty}, 'own': {pid: qty}, 'po': {pid: [onOrder, etaISO, etaQty]},
     'products': {pid: [asin, active, bom]}, 'asinProducts': {asin: [pid...]}, 'at': iso}. None on failure."""
     if not enabled():
-        print('finale: no FINALE_API_KEY/SECRET set - keeping Amazon FBM numbers', flush=True)
+        print('finale: no usable Finale credentials (FINALE_API_KEY/SECRET or FINALE_API_CONNECTION) - keeping Amazon FBM numbers', flush=True)
         return None
     try:
         t0 = time.time()
