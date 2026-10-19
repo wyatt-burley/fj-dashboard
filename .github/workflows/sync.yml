@@ -49,6 +49,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           FINALE_API_KEY: ${{ secrets.FINALE_API_KEY }}
           FINALE_API_SECRET: ${{ secrets.FINALE_API_SECRET }}
+          FINALE_API_CONNECTION: ${{ secrets.FINALE_API_CONNECTION }}
           FINALE_ACCOUNT: funkyjunque
           MODE: ${{ steps.mode.outputs.mode }}
         run: python sync.py
