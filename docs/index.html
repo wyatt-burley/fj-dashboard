@@ -179,7 +179,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   </form>
 </div>
 <div class="sub" id="sub"></div>
-<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API connected.</b> Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
+<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API + Finale connected.</b> Warehouse (FBM) stock and open purchase orders from Finale, refreshed hourly. Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
 <div class="cards" id="cards"></div>
 
 <div class="panels">
@@ -244,7 +244,7 @@ let TAG_EDITS=window.__FJ_TAGS__||{};
 const DIRTY=new Set(); // asins with a local edit not yet confirmed saved - never clobbered by a refresh
 let lastChecked=new Date(); // when THIS browser last loaded/refreshed data from the DB
 function renderSub(){document.getElementById('sub').innerHTML=
-  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}${(()=>{const f=S.finaleAt?new Date(S.finaleAt):null;if(!f||isNaN(f))return '';const h=Math.max(0,(Date.now()-f.getTime())/36e5);return ' &nbsp;|&nbsp; FBM from Finale <b>'+(h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h')+' ago</b>';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
 renderSub();
 
 /* KPI cards + charts recompute for the active scope; renderStats() is defined
@@ -341,7 +341,7 @@ const COLS=[
   ['price','Price',1],['cost','Unit Cost',1],['gm','GM %',1],
   ['u1','1-Day',1],['u7','7-Day',1],['u30','30-Day',1],['u365','12-Mo',1],
   ['sales','30d Sales $',0],['daily','Units/day',0],
-  ['inv','FBA Inv',1],['fbaDays','FBA Days',1],['fbm','FBM Inv',1],['inbound','Inbound',1],
+  ['inv','FBA Inv',1],['fbaDays','FBA Days',1],['fbm','FBM Inv',1],['inbound','Inbound',1],['onOrder','On Order',1],['u30b','In Bundles 30d',0],
   ['combDays','Total Days',1],['restock','Restock Qty',1],['risk','Sales Risk',1],['trend','Trend',1],['notes','Notes',1]];
 let visible={};COLS.forEach(c=>visible[c[0]]=!!c[2]);
 try{const s=localStorage.getItem('fj_cols');if(s)visible=Object.assign(visible,JSON.parse(s));}catch(e){}
@@ -532,7 +532,7 @@ let searchMiss=[];
 const FIELDS=[
  ['sales','30d Sales $','num'],['u1','1-Day units','num'],['u7','7-Day units','num'],['u30','30-Day units','num'],
  ['u365','12-Mo units','num'],['daily','Units/day','num'],['inv','FBA Inv','num'],['fbaDays','FBA Days','num'],
- ['fbm','FBM Inv','num'],['inbound','Inbound','num'],['combDays','Total Days','num'],['price','Price','num'],
+ ['fbm','FBM Inv','num'],['inbound','Inbound','num'],['onOrder','On Order','num'],['u30b','In Bundles 30d','num'],['combDays','Total Days','num'],['price','Price','num'],
  ['cost','Unit Cost','num'],['gm','GM %','num'],['name','Product name','text'],['asin','ASIN','text'],
  ['parent','Parent ASIN','text'],['sku','SKU','text'],['parentSku','Parent SKU','text'],['color','Color','text'],['season','Season','text'],
  ['kw','Keyword','text'],['category','Category','text'],['tags','Tags','text']];
@@ -540,6 +540,7 @@ const NOPS=[['gt','>'],['gte','>='],['lt','<'],['lte','<='],['eq','='],['ne','!=
 const TOPS=[['has','contains'],['all','contains all'],['nhas',"doesn't contain"],['is','is exactly'],['isnot','is not'],['starts','starts with'],['ends','ends with'],['blank','is blank'],['nblank','is not blank']];
 const NOVAL=['blank','nblank'];
 let CONDS=[],condDraft=[];
+function fmtEta(d){const t=new Date(d+'T12:00:00');return isNaN(t)?d:t.toLocaleDateString(undefined,{month:'short',day:'numeric'})+(t.getFullYear()!==new Date().getFullYear()?" '"+String(t.getFullYear()).slice(2):'');}
 function fval(r,f){
   if(f==='cost')return COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:r.cost;
   if(f==='gm'){const g=r._gm!=null?r._gm:r.gm;return g==null?null:Math.round(g*1000)/10;}
@@ -669,7 +670,7 @@ renderViews();loadViews();
 /* ---- CSV export of the current (filtered) rows ---- */
 function csvEsc(v){v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
 document.getElementById('csvBtn').onclick=()=>{
-  const cols=['parent_asin','asin','sku','sku_fbm','parent_sku','name','color','season','discontinued','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','inbound','total_days','restock_qty','tier','risk','kw','category','note'];
+  const cols=['parent_asin','asin','sku','sku_fbm','parent_sku','name','color','season','discontinued','tags','price','cost','gm_pct','u1','u7','u30','u365','sales_30d','daily','fba_inv','fba_days','fbm_inv','fbm_amazon','fbm_source','inbound','on_order','next_po_date','next_po_qty','bundle_units_30d','total_days','restock_qty','tier','risk','kw','category','note'];
   const lines=[cols.join(',')];
   filteredRows().forEach(r=>{
     const g=r._gm!=null?r._gm:r.gm;
@@ -677,7 +678,7 @@ document.getElementById('csvBtn').onclick=()=>{
       csvEsc(TAG_EDITS[r.asin]!=null?TAG_EDITS[r.asin]:(r.tags||'')),
       r.price==null?'':r.price,(COST_EDITS[r.asin]!=null?COST_EDITS[r.asin]:(r.cost==null?'':r.cost)),
       g==null?'':Math.round(g*1000)/10,r.u1,r.u7,r.u30,r.u365,r.sales,r.daily,r.inv,
-      r.fbaDays==null?'':r.fbaDays,r.fbm,r.inbound,r.combDays==null?'':r.combDays,r._restock||0,r.tier,r.risk,
+      r.fbaDays==null?'':r.fbaDays,r.fbm,r.fbmAmz==null?'':r.fbmAmz,r.fbmSrc||'',r.inbound,r.onOrder||0,r.poEta||'',r.poEtaQty||'',r.u30b||0,r.combDays==null?'':r.combDays,r._restock||0,r.tier,r.risk,
       csvEsc(r.kw||''),csvEsc(r.category||''),csvEsc((typeof NOTES!=='undefined'&&NOTES[r.asin]||{}).note||'')].join(','));
   });
   const blob=new Blob([lines.join('\r\n')],{type:'text/csv'});
@@ -758,7 +759,7 @@ function stickify(){
 }
 
 /* header tooltips */
-const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, HIGH < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',sku:'Seller SKUs for this ASIN - the FBA SKU and the FBM SKU. Hover a cell to see every SKU on the ASIN; search finds any of them',parentSku:'Parent SKU (from Sellery) - click a value to group its variations',color:'Color (from the Amazon catalog)',season:'Seasonal group (from Xnurta product line) - drives the seasonal restock factor',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Merchant-fulfilled (FBM) units right now',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Monthly units ordered since Jan 2025; 2025 and 2026 are colored separately so you can compare the same month year-over-year',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x seasonally-adjusted units/day - FBA on hand - inbound. A up/down arrow means the prior-year YoY shape scaled the forecast for the upcoming window. Change the base target + season factors under "How the flags work".'};
+const TITLES={img:'Product image - click to open the Amazon listing',tier:'FBA stock health: OUT = 0 in FBA, HIGH < 7 days, LOW 7-14, OK 14+',parent:'Parent ASIN - sort or search by this to group each parent with its child variations and see which are OOS or at risk',asin:'Amazon child ASIN',name:'Product title',sku:'Seller SKUs for this ASIN - the FBA SKU and the FBM SKU. Hover a cell to see every SKU on the ASIN; search finds any of them',parentSku:'Parent SKU (from Sellery) - click a value to group its variations',color:'Color (from the Amazon catalog)',season:'Seasonal group (from Xnurta product line) - drives the seasonal restock factor',tags:'Your own labels - type to edit; shared with the whole team and each tag becomes a filter chip above',kw:'Keyword field (from Sellery)',category:'Category (from Sellery)',price:'Current price on Amazon',cost:'Unit cost - editable; recalculates GM% and saves for the team',gm:'Gross margin % (price vs unit cost)',u1:'Units ordered yesterday, all channels (Amazon reports lag ~48h)',u7:'Units ordered, trailing 7 days, all channels',u30:'Units ordered, trailing 30 days, all channels',u365:'Units ordered, trailing 12 months',sales:'Revenue, trailing 30 days, all channels',daily:'Velocity: 30-day units / 30',inv:'Sellable units in FBA right now',fbaDays:'Days of FBA cover at current velocity - drives the tier',fbm:'Warehouse (FBM) units - from Finale: Northbrook on hand minus reservations, plus bundles buildable from components (the same number Finale pushes to Amazon). Refreshed hourly. AMZ = no Finale match, Amazon listing qty shown; a yellow dot = Amazon currently shows a different number',onOrder:'Units on open purchase orders in Finale (on the way to the warehouse, not FBA). Second line = earliest expected receive date',u30b:'Units of this item sold inside bundles / multi-packs in the last 30 days (bundle 30-day units x qty per bundle, from Finale bills of materials). Not included in 30-Day',inbound:'Units on the way to or being received by Amazon',combDays:'Days of cover counting FBA + FBM together',risk:'AT RISK = FBA+FBM and FBA+inbound both under 14 days of cover',trend:'Monthly units ordered since Jan 2025; 2025 and 2026 are colored separately so you can compare the same month year-over-year',notes:'Team notes - save live for everyone',restock:'Suggested units to send to FBA = target cover (days) x seasonally-adjusted units/day - FBA on hand - inbound. A up/down arrow means the prior-year YoY shape scaled the forecast for the upcoming window. Change the base target + season factors under "How the flags work".'};
 
 /* ---- season chips + seasonal restock factors ---- */
 const SEASON_META={Winter:['Winter','#2a78d6','#e7f0fb'],Summer:['Summer','#c9791b','#fbeede'],Bridal:['Bridal','#a3568c','#f6e9f2'],Other:['Other','#6b7688','#eef1f5']};
@@ -1034,7 +1035,17 @@ function cellHTML(k,r){
     case 'daily': return '<td class="r" data-c="daily">'+r.daily+'</td>';
     case 'inv': return '<td class="r" data-c="inv">'+r.inv.toLocaleString()+'</td>';
     case 'fbaDays': return '<td class="r" data-c="fbaDays">'+dcell(r.fbaDays)+'</td>';
-    case 'fbm': return '<td class="r" data-c="fbm">'+r.fbm.toLocaleString()+'</td>';
+    case 'fbm': {
+      // Finale (warehouse truth) when matched; a small dot flags where Amazon's listing qty differs
+      const d=r.fbmSrc==='finale'&&r.fbmAmz!=null&&r.fbmAmz!==r.fbm;
+      const t=r.fbmSrc==='finale'?('Finale: '+r.fbm.toLocaleString()+' (Northbrook, after reservations, incl. bundles)'+(d?' - Amazon listing currently shows '+r.fbmAmz.toLocaleString():''))
+        :(r.fbmSrc==='amazon'?'From the Amazon listing - no matching product in Finale':'');
+      return '<td class="r" data-c="fbm" title="'+esc(t)+'">'+r.fbm.toLocaleString()+(d?'<span style="color:#cc9a00;font-weight:800" title="'+esc(t)+'"> &bull;</span>':'')
+        +(r.fbmSrc==='amazon'?'<span style="font-size:9px;color:#8b95a7;font-weight:700"> AMZ</span>':'')+'</td>';
+    }
+    case 'onOrder': return '<td class="r" data-c="onOrder" title="'+esc(r.onOrder?('Open purchase orders in Finale: '+r.onOrder.toLocaleString()+' units'+(r.poEta?'. Next: '+(r.poEtaQty||0).toLocaleString()+' expected '+r.poEta:'')):'')+'">'
+      +(r.onOrder?'<b>'+r.onOrder.toLocaleString()+'</b>'+(r.poEta?'<div style="font-size:10.5px;color:#7a8499;font-weight:500">next '+esc(fmtEta(r.poEta))+'</div>':''):'<span class="muted">-</span>')+'</td>';
+    case 'u30b': return '<td class="r" data-c="u30b">'+(r.u30b?r.u30b.toLocaleString():'<span class="muted">-</span>')+'</td>';
     case 'inbound': return '<td class="r" data-c="inbound">'+(r.inbound?'<b>'+r.inbound.toLocaleString()+'</b>':'<span class="muted">-</span>')+'</td>';
     case 'combDays': return '<td class="r" data-c="combDays">'+dcell(r.combDays)+'</td>';
     case 'restock': {
@@ -1218,7 +1229,7 @@ document.getElementById('tb').addEventListener('focusout',e=>{
 });
 document.getElementById('foot').innerHTML=
   `<b>Sales windows:</b> 1-day = ${esc(S.dayDate)} (Amazon sales reports lag ~48h); 7/30-day and 12-Mo = units ordered across ALL channels (FBA + FBM). `+
-  `<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
+  `<b>FBM Inv</b> and <b>On Order</b> come from Finale (warehouse stock pushed to Amazon, and open purchase orders), refreshed hourly. <b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
   `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
   `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs are the Sellery Cost field (includes the bundle/adder logic); prices, images & color live from Amazon. `+
   `<b>Season</b> comes from the Xnurta product line (Winter/Summer/Bridal/Other) and drives the seasonal restock factor. <b>DISC</b> ASINs (vendor discontinued) are shown but never get a reorder suggestion. `+
