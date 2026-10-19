@@ -179,7 +179,7 @@ tr.trendrow td{background:#fbfcfe;padding:10px 16px}
   </form>
 </div>
 <div class="sub" id="sub"></div>
-<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API + Finale connected.</b> Warehouse (FBM) stock and open purchase orders from Finale, refreshed hourly. Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
+<div class="apibanner"><span class="pulse"></span><span><b>LIVE - Amazon SP-API connected.</b> Warehouse (FBM) stock refreshed hourly. Live FBA inventory, inbound, inventory age &amp; fees, Amazon's own sell-through across 1 / 7 / 30 / 365-day windows, product images, and per-ASIN 12-month trends. Tags, costs and notes save live for the whole team.</span></div>
 <div class="cards" id="cards"></div>
 
 <div class="panels">
@@ -244,7 +244,7 @@ let TAG_EDITS=window.__FJ_TAGS__||{};
 const DIRTY=new Set(); // asins with a local edit not yet confirmed saved - never clobbered by a refresh
 let lastChecked=new Date(); // when THIS browser last loaded/refreshed data from the DB
 function renderSub(){document.getElementById('sub').innerHTML=
-  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}${(()=>{const f=S.finaleAt?new Date(S.finaleAt):null;if(!f||isNaN(f))return '';const h=Math.max(0,(Date.now()-f.getTime())/36e5);return ' &nbsp;|&nbsp; FBM from Finale <b>'+(h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h')+' ago</b>';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
+  `<b>Live Amazon data</b> - sales windows: 1-day (${esc(S.dayDate)}, latest Amazon reports), trailing 7/30 days, and trailing 12 months &nbsp;|&nbsp; Top sellers = child ASINs over <b>$${S.salesThreshold.toLocaleString()}</b> / 30d &nbsp;|&nbsp; FBA flag = under <b>${S.coverFlagDays} days</b> cover (critical under ${S.criticalDays}) &nbsp;|&nbsp; Pulled <b>${esc(S.generated)}</b>${(()=>{const u=window.__FJ_UPDATED__?new Date(window.__FJ_UPDATED__):null;if(!u||isNaN(u))return '';const h=Math.max(0,(Date.now()-u.getTime())/36e5);const ago=h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h';return ' &nbsp;|&nbsp; Synced <b>'+ago+' ago</b> (auto-refreshes every 6h)';})()}${(()=>{const f=(S.fbmAt||S.finaleAt)?new Date(S.fbmAt||S.finaleAt):null;if(!f||isNaN(f))return '';const h=Math.max(0,(Date.now()-f.getTime())/36e5);return ' &nbsp;|&nbsp; FBM '+(S.fbmSource==='finale'?'from Finale ':'')+'updated <b>'+(h<1?Math.round(h*60)+' min':Math.round(h*10)/10+' h')+' ago</b>';})()} &nbsp;|&nbsp; Checked <b>${lastChecked.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',second:'2-digit'})}</b>`;}
 renderSub();
 
 /* KPI cards + charts recompute for the active scope; renderStats() is defined
@@ -351,6 +351,9 @@ const COLKEYS=COLS.map(c=>c[0]);
 let colOrder=[],colW={};
 try{const o=JSON.parse(localStorage.getItem('fj_colorder')||'[]');if(Array.isArray(o))colOrder=o;
   const w=JSON.parse(localStorage.getItem('fj_colw')||'{}');if(w&&typeof w==='object')colW=w;}catch(e){}
+/* On Order / In Bundles exist only when Finale data is flowing (FJ's Finale plan needs API access) */
+const FINALE_ONLY=['onOrder','u30b'];
+function colAvailable(k){return !FINALE_ONLY.includes(k)||(window.__FJ_DATA__&&window.__FJ_DATA__.summary&&window.__FJ_DATA__.summary.fbmSource==='finale');}
 function orderedCols(){
   const by={};COLS.forEach(c=>by[c[0]]=c);
   const keys=['sel'];
@@ -358,7 +361,7 @@ function orderedCols(){
   // columns not in the saved order (e.g. added in a later release) slot in after their default neighbour
   COLS.forEach((c,i)=>{if(keys.includes(c[0]))return;
     const prev=i>0?keys.indexOf(COLS[i-1][0]):-1;keys.splice(prev+1,0,c[0]);});
-  return keys.map(k=>by[k]);
+  return keys.map(k=>by[k]).filter(c=>colAvailable(c[0]));
 }
 function saveCols(){try{localStorage.setItem('fj_cols',JSON.stringify(visible));
   localStorage.setItem('fj_colorder',JSON.stringify(colOrder));localStorage.setItem('fj_colw',JSON.stringify(colW));}catch(e){}}
@@ -1229,7 +1232,7 @@ document.getElementById('tb').addEventListener('focusout',e=>{
 });
 document.getElementById('foot').innerHTML=
   `<b>Sales windows:</b> 1-day = ${esc(S.dayDate)} (Amazon sales reports lag ~48h); 7/30-day and 12-Mo = units ordered across ALL channels (FBA + FBM). `+
-  `<b>FBM Inv</b> and <b>On Order</b> come from Finale (warehouse stock pushed to Amazon, and open purchase orders), refreshed hourly. <b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
+  (S.fbmSource==='finale'?`<b>FBM Inv</b> and <b>On Order</b> come from Finale (warehouse stock pushed to Amazon, and open purchase orders), refreshed hourly. `:`<b>FBM Inv</b> = the warehouse quantity Finale pushes to Amazon, read from Amazon's listings report and refreshed hourly. `)+`<b>FBA Days</b> = FBA inventory / (30d units / 30). <b>Total Days</b> adds FBM. Tiers: OUT (0 FBA), HIGH (&lt;${S.criticalDays}d), LOW (${S.criticalDays}-${S.coverFlagDays}d), OK (${S.coverFlagDays}d+). `+
   `<b>Sales Risk is inbound-aware:</b> short FBA+FBM cover still shows BUFFERED if inbound restores ${S.coverFlagDays}+ days. `+
   `<b>Unit Cost</b> is editable - edits recalculate GM% and save for the whole team. Costs are the Sellery Cost field (includes the bundle/adder logic); prices, images & color live from Amazon. `+
   `<b>Season</b> comes from the Xnurta product line (Winter/Summer/Bridal/Other) and drives the seasonal restock factor. <b>DISC</b> ASINs (vendor discontinued) are shown but never get a reorder suggestion. `+
