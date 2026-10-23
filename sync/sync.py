@@ -64,10 +64,29 @@ def sb_req(path, method='GET', body=None, prefer=None):
         data = json.dumps(body).encode()
     if prefer:
         headers['Prefer'] = prefer
-    req = urllib.request.Request(SUPABASE_URL + path, data=data, method=method, headers=headers)
-    with urllib.request.urlopen(req) as r:
-        raw = r.read()
-    return json.loads(raw) if raw else None
+    # Supabase intermittently answers 5xx on the ~7 MB snapshot upsert (Oct 2026); retry those with
+    # backoff and log Supabase's own error body so a persistent failure says why.
+    tries = 4
+    for attempt in range(1, tries + 1):
+        req = urllib.request.Request(SUPABASE_URL + path, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                raw = r.read()
+            if attempt > 1:
+                print(f'  supabase {method} {path.split("?")[0]}: ok on attempt {attempt}', flush=True)
+            return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors='replace')[:600]
+            size = f' ({len(data)/1e6:.1f} MB body)' if data else ''
+            print(f'  supabase {method} {path.split("?")[0]}{size}: HTTP {e.code} attempt {attempt}/{tries}: {detail}',
+                  flush=True)
+            if e.code < 500 or attempt == tries:
+                raise
+        except (urllib.error.URLError, TimeoutError) as e:
+            print(f'  supabase {method} {path.split("?")[0]}: {e} attempt {attempt}/{tries}', flush=True)
+            if attempt == tries:
+                raise
+        time.sleep(15 * attempt)
 
 def state_get(key):
     rows = sb_req(f'/rest/v1/sync_state?key=eq.{key}&select=data')
