@@ -713,7 +713,7 @@ async function doRefresh(){
       window.sb.from('overrides').select('*'),
       window.sb.from('notes').select('*')]);
     if(snap.error||!snap.data)throw new Error('snapshot');
-    const nd=snap.data.data;
+    const nd=await window.fjUnpack(snap.data.data);
     // replace rows + summary + months in place (keep const bindings valid)
     R.length=0;(nd.rows||[]).forEach(r=>R.push(r));
     Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,nd.summary||{});
@@ -1309,6 +1309,14 @@ render();
 <script>
 const sb = supabase.createClient('https://ycpuazaitviokvdogvfe.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InljcHVhemFpdHZpb2t2ZG9ndmZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MzM5OTgsImV4cCI6MjEwMzUwOTk5OH0.4B2VqUuNv7VN49fzK0iFSstBvCh0ZGYEMJqg7IHeziA');
 window.sb = sb;
+// Snapshot may be stored gzip+base64 ({v:2,gz:'...'}) to keep the Supabase write small; older plain JSON still works.
+window.fjUnpack = async function(d){
+  if (!d || typeof d.gz !== 'string') return d;
+  const bin = atob(d.gz), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const txt = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(txt);
+};
 async function fetchAll(tries){
   for (let i = 0; i < tries; i++) {
     try {
@@ -1330,7 +1338,8 @@ async function boot(){
   const res = await fetchAll(4);
   if (!res) { document.getElementById('liErr').textContent = 'Data load failed - check connection and retry'; return; }
   const [snap, ov, nts] = res;
-  window.__FJ_DATA__ = snap.data.data;
+  try { window.__FJ_DATA__ = await window.fjUnpack(snap.data.data); }
+  catch (e) { document.getElementById('liErr').textContent = 'Data load failed - please update your browser'; return; }
   window.__FJ_UPDATED__ = snap.data.updated_at;
   window.__FJ_TAGS__ = {}; window.__FJ_COSTS__ = {}; window.__FJ_NOTES__ = {}; window.__FJ_RTARGET__ = {};
   (ov.data || []).forEach(o => {
