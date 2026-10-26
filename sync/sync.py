@@ -17,7 +17,7 @@ Env: LWA_CLIENT_ID, LWA_CLIENT_SECRET, LWA_REFRESH_TOKEN,
      SUPABASE_URL, SUPABASE_SERVICE_KEY  (optional: MARKETPLACE_ID, SELLER_ID, MODE,
      FINALE_API_KEY, FINALE_API_SECRET, FINALE_ACCOUNT)
 """
-import calendar, collections, datetime, json, os, re, statistics, time, urllib.request
+import base64, calendar, collections, datetime, gzip, json, os, re, statistics, time, urllib.request
 import spapi
 import finale
 
@@ -87,6 +87,25 @@ def sb_req(path, method='GET', body=None, prefer=None):
             if attempt == tries:
                 raise
         time.sleep(15 * attempt)
+
+def snap_get():
+    """Current dashboard snapshot data (decoded), or None if there is no snapshot yet."""
+    rows = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
+    if not rows: return None
+    d = rows[0]['data']
+    if isinstance(d, dict) and isinstance(d.get('gz'), str):
+        d = json.loads(gzip.decompress(base64.b64decode(d['gz'])))
+    return d
+
+def snap_put(data, stamp_updated=False):
+    """Write the snapshot gzip+base64 ({v:2, gz}) - ~1.3 MB instead of ~7 MB of JSONB, which was hitting
+    Postgres' statement timeout (57014) on the upsert. The page decodes it (window.fjUnpack)."""
+    raw = json.dumps(data, separators=(',', ':')).encode()
+    body = {'id': 1, 'data': {'v': 2, 'gz': base64.b64encode(gzip.compress(raw, 6)).decode()}}
+    if stamp_updated:
+        body['updated_at'] = datetime.datetime.utcnow().isoformat() + 'Z'
+    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', body, prefer='resolution=merge-duplicates')
+    print(f'  snapshot written: {len(raw)/1e6:.1f} MB json -> {len(body["data"]["gz"])/1e6:.2f} MB stored', flush=True)
 
 def state_get(key):
     rows = sb_req(f'/rest/v1/sync_state?key=eq.{key}&select=data')
@@ -196,9 +215,8 @@ def run_hourly_amazon_fbm():
     fbm_by_sku, fbm_asin, _ = parse_fbm_listings(raw)
     if not fbm_by_sku:
         print('FBM listings report came back empty - snapshot left as is', flush=True); return
-    snap = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
-    if not snap: print('no snapshot yet'); return
-    data = snap[0]['data']
+    data = snap_get()
+    if not data: print('no snapshot yet'); return
     rows = data.get('rows') or []
     by_asin = {}
     for sku, q in fbm_by_sku.items():
@@ -214,8 +232,7 @@ def run_hourly_amazon_fbm():
     refresh_summary_risk(data['summary'], rows)
     data['summary']['fbmAt'] = datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z'
     data['summary'].setdefault('fbmSource', 'amazon')
-    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', {'id': 1, 'data': data},
-           prefer='resolution=merge-duplicates')
+    snap_put(data)
     print(f"hourly FBM from Amazon listings: {len(fbm_by_sku)} FBM listings, {changed} rows changed | "
           f"{data['summary']['atRiskCount']} at risk | ${data['summary']['revAtRisk']:,.0f} at risk", flush=True)
 
@@ -226,9 +243,8 @@ def run_finale():
     fin = finale.load(state_get, state_put)
     if not fin:
         run_hourly_amazon_fbm(); return
-    snap = sb_req('/rest/v1/dashboard_snapshot?id=eq.1&select=data')
-    if not snap: print('no snapshot yet'); return
-    data = snap[0]['data']
+    data = snap_get()
+    if not data: print('no snapshot yet'); return
     rows = data.get('rows') or []
     for r in rows:
         skus = set((r.get('skuList') or '').split()) | {r.get('sku'), r.get('skuFba'), r.get('skuFbm')} - {None, ''}
@@ -242,8 +258,7 @@ def run_finale():
     data['summary']['fbmSource'] = 'finale'
     data['summary']['finaleAt'] = fin['at']
     data['summary']['fbmAt'] = fin['at']
-    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST', {'id': 1, 'data': data},
-           prefer='resolution=merge-duplicates')
+    snap_put(data)
     print('snapshot patched from Finale:', len(rows), 'rows |', data['summary']['atRiskCount'], 'at risk |',
           '$' + format(data['summary']['revAtRisk'], ',.0f'), 'at risk', flush=True)
 
@@ -631,9 +646,7 @@ def run_fast():
                               ['Shipped', sum(s['inboundShipped'] for s in skus.values())],
                               ['Receiving', sum(s['inboundReceiving'] for s in skus.values())]]}
 
-    sb_req('/rest/v1/dashboard_snapshot?on_conflict=id', 'POST',
-           {'id': 1, 'data': data, 'updated_at': datetime.datetime.utcnow().isoformat() + 'Z'},
-           prefer='resolution=merge-duplicates')
+    snap_put(data, stamp_updated=True)
     print('snapshot upserted:', len(rows), 'rows |', summary['flaggedCount'], 'flagged |',
           '$' + format(summary['revAtRisk'], ',.0f'), 'at risk')
 
